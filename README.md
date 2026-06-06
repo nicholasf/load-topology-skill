@@ -31,9 +31,9 @@ The top of the file is a machines table. Narrative content — notes, startup co
 
 | name | hostname | tailscale-ip | local-ip | os | role | ssh | ssh-user | gpu | vram | last-verified |
 |------|----------|--------------|----------|----|------|-----|----------|-----|------|---------------|
-| pond | pond | 100.112.70.59 | 192.168.86.76 | Ubuntu 24.04 WSL2 | LLM Node, Mesh Node | yes | | RTX 4090 | 24GB | 2026-06-01 |
-| gollum | gollum | 100.83.163.100 | 192.168.86.x | Fedora 42 | LLM Node, Mesh Node | yes | | Radeon 780M | 15.8GB UMA | 2026-06-01 |
-| hut | hut | 100.86.124.123 | | macOS | Client | yes | | — | — | 2026-06-01 |
+| pond | pond | 100.x.x.1 | 192.168.x.1 | Ubuntu 24.04 WSL2 | LLM Node, Mesh Node | yes | | RTX 4090 | 24GB | 2026-06-01 |
+| gollum | gollum | 100.x.x.2 | 192.168.x.2 | Fedora 42 | LLM Node, Mesh Node | yes | | Radeon 780M | 15.8GB UMA | 2026-06-01 |
+| hut | hut | 100.x.x.3 | | macOS | Client | yes | | — | — | 2026-06-01 |
 
 **Columns:**
 - `name` — human-friendly name. There is no rule against warmth here.
