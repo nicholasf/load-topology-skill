@@ -86,6 +86,35 @@ When the user says `/load-topology refresh` or "refresh topology":
 
 ---
 
+## Benchmark subcommand
+
+When the user says `/load-topology benchmark <hostname> <model>` or "benchmark llm":
+
+1. Confirm the model is reachable:
+   ```bash
+   curl -s http://<hostname>:9337/v1/models
+   ```
+   Stop and report if the server is not responding.
+
+2. Run the benchmark script:
+   ```bash
+   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/benchmark_llm.py" \
+     <hostname> <model> [--port 9337] [--runs 3]
+   ```
+   Default is 3 runs. The script streams a fixed prompt, measures TTFT (time to first token) and
+   generation throughput (tok/s), averages across runs, then writes an `## LLM Benchmarks` table
+   into the topology file.
+
+3. Report the results:
+   ```
+   gollum / qwen3-coder-30b:  ttft=312ms  tok/s=46.8  (avg of 3 runs)
+   ```
+
+4. Re-read the topology file and show the updated `## LLM Benchmarks` table so the user can
+   see the new entry alongside any prior results.
+
+---
+
 ## Notes
 
 - The topology file is the source of truth. Always read it fresh — do not rely on cached knowledge.
