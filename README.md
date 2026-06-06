@@ -1,6 +1,6 @@
 # load-topology-skill
 
-This skill will let you ask an agent to do things with other machines on your network, including other agents. Get down! 
+This skill will let you command an agent to do things with other machines on your network, including other agents. Get down! 
 
 For a home lab power user with a few machines on a personal network, knowing what you have is fundamental to getting anything done with agents. This skill formalises that knowledge as a topology file — a structured record of your machines, their roles, the models they run, and how to reach them — so agents can read it, reason about it, and act.
 
