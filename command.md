@@ -73,13 +73,13 @@ Inform the user which machine and model are active, the API endpoint (e.g. `http
 
 ---
 
-## Refresh subcommand
+## Sync subcommand
 
-When the user says `/load-topology refresh` or "refresh topology":
+When the user says `/load-topology sync` or "sync topology" or "refresh topology":
 
 1. Run:
    ```bash
-   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/refresh_topology.py"
+   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/sync.py"
    ```
 2. Report the archive path and a summary of changes (new machines added, IPs updated, machines marked offline).
 3. Re-read the updated topology file and present the refreshed machines table.

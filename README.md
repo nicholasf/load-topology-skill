@@ -1,6 +1,8 @@
 # load-topology-skill
 
-This is a skill which relies on some [prerequisites](#prerequisites) to then let an agent coordinate with other ones. I use it with [track-tasks](https://github.com/nicholasf/track-tasks-skill) and [ask-foreign-agent](https://github.com/nicholasf/ask-foreign-agent-skill) to assign workloads to different LLM nodes in my home network.
+This will let you begin having conversations with your primary agent so you can ask it to get other agents to do things for you.
+
+This is a skill which relies on some [prerequisites](#prerequisites) to then let an agent coordinate with other ones. I use it with [track-tasks](https://github.com/nicholasf/track-tasks-skill) and [ask-foreign-agent](https://github.com/nicholasf/ask-foreign-agent-skill) to assign workloads to different LLM nodes in my home network. If you use [manage-skills](https://github.com/nicholasf/manage-skills-skill) it will help you set all of these up and autoload them whenever you start a session with your agent.
 
 This is a home lab tool. It does not try to solve enterprise concerns like multiple SSH identities, key rotation, or multi-tenant access. It assumes you own all the machines, you have set up SSH keys, and you want your agent to know as much about your setup as you do.
 
@@ -8,21 +10,24 @@ This is a home lab tool. It does not try to solve enterprise concerns like multi
 
 Once the [prerequisites](#prerequisites) are in place, the skill works through three commands in Claude Code.
 
+**Sync the topology**
+
+```
+/load-topology sync
+```
+
+Runs `scripts/sync.py`, which queries Tailscale for current IPs and online status, archives the previous file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same directory, and rewrites the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
+
+
 **Read the topology**
+
+Use this at the start of each session or when you want your agent to begin working with others locally.
 
 ```
 /load-topology
 ```
 
 Reads `topology.md`, presents the machines table and available models, and lets you start or swap a running model. This is the day-to-day entry point — use it whenever you want the agent to know what is in your mesh before delegating a workload.
-
-**Refresh the topology**
-
-```
-/load-topology refresh
-```
-
-Runs `scripts/refresh_topology.py`, which queries Tailscale for current IPs and online status, archives the previous file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same directory, and rewrites the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
 
 **Benchmark a model**
 
@@ -37,7 +42,7 @@ Runs `scripts/benchmark_llm.py` against a live llama-server on the named host, m
 The typical first-run sequence is:
 
 1. Copy the [example topology format](#topology-file-format) and fill in your machines manually.
-2. Run `/load-topology refresh` to pull in live Tailscale IPs and mark machines online or offline.
+2. Run `/load-topology sync` to pull in live Tailscale IPs and mark machines online or offline.
 3. Start llama-server on an LLM Node (the skill will show you the startup command).
 4. Run `/load-topology benchmark <hostname> <model>` to record baseline performance.
 
@@ -95,7 +100,7 @@ The top of the file is a machines table. Narrative content — notes, startup co
 **Columns:**
 - `name` — human-friendly name. There is no rule against warmth here.
 - `hostname` — Tailscale hostname, used for SSH and API calls
-- `tailscale-ip` — Tailscale IPv4 address; updated by refresh
+- `tailscale-ip` — Tailscale IPv4 address; updated by sync
 - `local-ip` — LAN IP, maintained manually; useful when Tailscale is unavailable
 - `os` — operating system
 - `role` — `Client`, `LLM Node`, `Mesh Node`; comma-separated for multiple
@@ -123,7 +128,7 @@ The `last-running` note per model records the last time a model was confirmed li
 
 The reference implementation uses Tailscale — machines are reachable by hostname anywhere on the mesh, no port forwarding needed. The discovery script and topology format are network-agnostic; another provider (ZeroTier, plain SSH config) can be substituted.
 
-## Building and refreshing your topology
+## Building and syncing your topology
 
 Use `scripts/discover_tailscale.py` to list machines visible on your Tailscale mesh:
 
@@ -133,10 +138,10 @@ python3 scripts/discover_tailscale.py
 
 This gives you the raw material — hostnames, IPs, online status — to fill in the machines table. Manual columns (name, role, GPU, VRAM, SSH access) are filled in by you.
 
-To refresh an existing topology with current Tailscale data:
+To sync an existing topology with current Tailscale data:
 
 ```bash
-python3 scripts/refresh_topology.py
+python3 scripts/sync.py
 ```
 
 This archives the current file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same directory, then rebuilds the machines table from fresh discovery data, preserving all manually-maintained columns.
@@ -144,7 +149,7 @@ This archives the current file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same 
 Or use the slash command in Claude Code:
 
 ```
-/load-topology refresh
+/load-topology sync
 ```
 
 ## Benchmark suite
