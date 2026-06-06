@@ -1,5 +1,7 @@
 # load-topology-skill
 
+This skill will let you ask an agent to do things with other machines on your network, including other agents. Get down! 
+
 For a home lab power user with a few machines on a personal network, knowing what you have is fundamental to getting anything done with agents. This skill formalises that knowledge as a topology file — a structured record of your machines, their roles, the models they run, and how to reach them — so agents can read it, reason about it, and act.
 
 This is a home lab tool. It does not try to solve enterprise concerns like multiple SSH identities, key rotation, or multi-tenant access. It assumes you own all the machines, you have set up SSH keys, and you want your agent to know as much about your setup as you do.
