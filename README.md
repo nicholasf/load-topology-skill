@@ -1,14 +1,69 @@
 # load-topology-skill
 
-This skill will let you command an agent to do things with other machines on your network, including other agents. Get down! 
-
-For a home lab power user with a few machines on a personal network, knowing what you have is fundamental to getting anything done with agents. This skill formalises that knowledge as a topology file — a structured record of your machines, their roles, the models they run, and how to reach them — so agents can read it, reason about it, and act.
+This is a skill which relies on some [prerequisites](#prerequisites) to then let an agent coordinate with other ones. I use it with [track-tasks](https://github.com/nicholasf/track-tasks-skill) to assign workloads to different LLM nodes in my home network.
 
 This is a home lab tool. It does not try to solve enterprise concerns like multiple SSH identities, key rotation, or multi-tenant access. It assumes you own all the machines, you have set up SSH keys, and you want your agent to know as much about your setup as you do.
 
+## Getting started
+
+Once the [prerequisites](#prerequisites) are in place, the skill works through three commands in Claude Code.
+
+**Read the topology**
+
+```
+/load-topology
+```
+
+Reads `topology.md`, presents the machines table and available models, and lets you start or swap a running model. This is the day-to-day entry point — use it whenever you want the agent to know what is in your mesh before delegating a workload.
+
+**Refresh the topology**
+
+```
+/load-topology refresh
+```
+
+Runs `scripts/refresh_topology.py`, which queries Tailscale for current IPs and online status, archives the previous file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same directory, and rewrites the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
+
+**Benchmark a model**
+
+```
+/load-topology benchmark <hostname> <model>
+```
+
+Runs `scripts/benchmark_llm.py` against a live llama-server on the named host, measures TTFT and token throughput across three runs, and writes the results into the `## LLM Benchmarks` table in `topology.md`. Run this after loading a new GGUF so the results live alongside the rest of the node's data.
+
+**Populating topology.md for the first time**
+
+The typical first-run sequence is:
+
+1. Copy the [example topology format](#topology-file-format) and fill in your machines manually.
+2. Run `/load-topology refresh` to pull in live Tailscale IPs and mark machines online or offline.
+3. Start llama-server on an LLM Node (the skill will show you the startup command).
+4. Run `/load-topology benchmark <hostname> <model>` to record baseline performance.
+
+**Conventions assumed**
+
+- GGUFs are stored at `~/.local/share/gguf/` on each LLM Node (note per-machine exceptions in the topology).
+- `llama-server` (llama.cpp) listens on port `9337`; Ollama listens on port `11434`.
+- All LLM Nodes and Mesh Nodes are reachable over SSH as `$AGENT_SSH_USER` with key-based auth.
+- Tailscale hostnames are used for SSH and API calls; the machines table keeps both Tailscale and local IPs so the skill degrades gracefully if Tailscale is unavailable.
+
 ## Prerequisites
 
-Three environment variables are expected:
+### Software
+
+Each LLM Node needs at least one inference backend installed:
+
+- **[llama.cpp](https://github.com/ggerganov/llama.cpp)** — provides `llama-server`, the primary backend. Listens on port `9337` by convention.
+- **[Ollama](https://ollama.com)** — alternative backend. Listens on port `11434`.
+
+### GGUF storage
+
+The skill assumes GGUFs live at `~/.local/share/gguf/` on each LLM Node. Set `$GGUF_PATH` to override this default:
+
+**`$GGUF_PATH`** — path to the directory where GGUF model files are stored. If a machine stores models elsewhere, note the exception in its section of `topology.md`.
+
+### Environment variables
 
 **`$AGENT_SSH_USER`** — your username across all machines in the mesh. Every LLM Node and Mesh Node must have this user configured with passwordless key-based SSH auth before agents can act on them. An optional `ssh-user` column in the topology table overrides this per machine for the occasional exception.
 
