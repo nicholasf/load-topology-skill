@@ -16,7 +16,7 @@ Once the [prerequisites](#prerequisites) are in place, the skill works through t
 /load-topology sync
 ```
 
-Runs `scripts/refresh_topology.py`, which queries Tailscale for current IPs and online status, archives the previous file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same directory, and rewrites the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
+Runs `scripts/sync.py`, which queries Tailscale for current IPs and online status, archives the previous file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same directory, and rewrites the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
 
 
 **Read the topology**
@@ -141,7 +141,7 @@ This gives you the raw material — hostnames, IPs, online status — to fill in
 To sync an existing topology with current Tailscale data:
 
 ```bash
-python3 scripts/refresh_topology.py
+python3 scripts/sync.py
 ```
 
 This archives the current file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same directory, then rebuilds the machines table from fresh discovery data, preserving all manually-maintained columns.
