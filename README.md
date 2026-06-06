@@ -10,7 +10,7 @@ This is a home lab tool. It does not try to solve enterprise concerns like multi
 
 Three environment variables are expected:
 
-**`$SSH_USER`** — your username across all machines in the mesh. Every LLM Node and Mesh Node must have this user configured with passwordless key-based SSH auth before agents can act on them. An optional `ssh-user` column in the topology table overrides this per machine for the occasional exception.
+**`$AGENT_SSH_USER`** — your username across all machines in the mesh. Every LLM Node and Mesh Node must have this user configured with passwordless key-based SSH auth before agents can act on them. An optional `ssh-user` column in the topology table overrides this per machine for the occasional exception.
 
 **`$TOPOLOGY_PATH`** — path to your `topology.md` file. Default: `$SKILLS_HOME/topology.md`. Keep this outside any git repository — see [Privacy](#privacy).
 
@@ -44,8 +44,8 @@ The top of the file is a machines table. Narrative content — notes, startup co
 - `local-ip` — LAN IP, maintained manually; useful when Tailscale is unavailable
 - `os` — operating system
 - `role` — `Client`, `LLM Node`, `Mesh Node`; comma-separated for multiple
-- `ssh` — `yes` or `no`; whether `$SSH_USER` can reach this machine
-- `ssh-user` — leave blank to use `$SSH_USER`; fill in only when the username differs
+- `ssh` — `yes` or `no`; whether `$AGENT_SSH_USER` can reach this machine
+- `ssh-user` — leave blank to use `$AGENT_SSH_USER`; fill in only when the username differs
 - `gpu` — GPU model, or `—` for CPU-only or client machines
 - `vram` — VRAM available for inference
 - `last-verified` — date you last confirmed this row is accurate
