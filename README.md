@@ -1,6 +1,6 @@
 # load-topology-skill
 
-This is a skill which relies on some [prerequisites](#prerequisites) to then let an agent coordinate with other ones. I use it with [track-tasks](https://github.com/nicholasf/track-tasks-skill) to assign workloads to different LLM nodes in my home network.
+This is a skill which relies on some [prerequisites](#prerequisites) to then let an agent coordinate with other ones. I use it with [track-tasks](https://github.com/nicholasf/track-tasks-skill) and [ask-foreign-agent](https://github.com/nicholasf/ask-foreign-agent-skill) to assign workloads to different LLM nodes in my home network.
 
 This is a home lab tool. It does not try to solve enterprise concerns like multiple SSH identities, key rotation, or multi-tenant access. It assumes you own all the machines, you have set up SSH keys, and you want your agent to know as much about your setup as you do.
 
