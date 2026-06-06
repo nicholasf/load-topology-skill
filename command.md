@@ -73,9 +73,9 @@ Inform the user which machine and model are active, the API endpoint (e.g. `http
 
 ---
 
-## Refresh subcommand
+## Sync subcommand
 
-When the user says `/load-topology refresh` or "refresh topology":
+When the user says `/load-topology sync` or "sync topology" or "refresh topology":
 
 1. Run:
    ```bash
