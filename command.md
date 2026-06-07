@@ -136,7 +136,8 @@ When the user says `/load-topology sync` or "sync topology" or "refresh topology
    ```bash
    python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/sync.py"
    ```
-2. Report the archive path and a summary of changes (new machines added, IPs updated, machines marked offline).
+2. Report a summary of changes (new machines added, IPs updated, machines marked offline).
+   A single `topology-backup.md` is written before any changes.
 3. Re-read the updated topology file and present the refreshed machines table.
 
 ---

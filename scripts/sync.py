@@ -2,7 +2,7 @@
 import os
 import shutil
 import sys
-from datetime import datetime
+from datetime import datetime  # used by update_last_refreshed
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from discover_tailscale import TailscaleProvider
@@ -14,16 +14,12 @@ MANUAL_COLUMNS = {'name', 'local-ip', 'role', 'ssh', 'ssh-user', 'gpu', 'vram', 
 
 def get_topology_path() -> str:
     skills_home = os.environ.get('SKILLS_HOME', os.path.expanduser('~/.agents/skills'))
-    default = os.path.join(skills_home, 'topology.md')
-    return os.environ.get('TOPOLOGY_PATH', default)
+    return os.path.join(skills_home, 'topology.md')
 
 
-def archive(topology_path: str) -> str:
-    timestamp = datetime.now().strftime('%Y-%m-%dT%H-%M-%S')
-    archive_path = os.path.join(os.path.dirname(topology_path), f'{timestamp}-topology.md')
-    shutil.copy2(topology_path, archive_path)
-    print(f'Archived to: {archive_path}')
-    return archive_path
+def backup(topology_path: str) -> None:
+    backup_path = os.path.join(os.path.dirname(topology_path), 'topology-backup.md')
+    shutil.copy2(topology_path, backup_path)
 
 
 def parse_table(lines: list[str]) -> tuple[int, int, list[dict]]:
@@ -135,7 +131,7 @@ def main():
         print(f'Topology file not found: {topology_path}', file=sys.stderr)
         sys.exit(1)
 
-    archive(topology_path)
+    backup(topology_path)
 
     try:
         discovered = TailscaleProvider().discover()

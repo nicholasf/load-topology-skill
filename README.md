@@ -16,7 +16,7 @@ Once the [prerequisites](#prerequisites) are in place, the skill works through t
 /load-topology sync
 ```
 
-Runs `scripts/sync.py`, which queries Tailscale for current IPs and online status, archives the previous file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same directory, and rewrites the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
+Runs `scripts/sync.py`, which queries Tailscale for current IPs and online status, writes a single `topology-backup.md` before rewriting, and updates the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
 
 
 **Read the topology**
@@ -238,12 +238,11 @@ without risking interference with other skills.
 hostnames, IP addresses, and SSH usernames. Treat it like Terraform state — it can be
 regenerated, and it is nobody else's business.
 
-These patterns cover the main file, sidecar files, and archives:
+These patterns cover the main file, sidecars, and the backup:
 
 ```
 topology.md
 topology-*.md
-*-topology.md
 ```
 
 If your topology lives in a git repository, verify these patterns are present.
