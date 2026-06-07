@@ -78,6 +78,14 @@ The skill assumes GGUFs live at `~/.local/share/gguf/` on each LLM Node. Set `$G
 
 Add these to your `~/.zshrc` or `~/.bashrc`.
 
+### Secrets file
+
+Skills that depend on load-topology-skill store per-node secrets in `$SKILLS_HOME/.env`. Copy `.env.example` to `$SKILLS_HOME/.env` and fill in values as you add skills to your setup.
+
+The naming convention is `<NODE>_<SERVICE>_<VAR>`. For example, a Hermes bearer token for a node named `pond` is stored as `POND_HERMES_KEY`. The machines table in `topology.md` records the env var name in a skill-specific column (e.g. `hermes_key_env: POND_HERMES_KEY`) so each skill knows where to look without hardcoding node names.
+
+This file is gitignored — it is machine-local and may contain secrets.
+
 ## Topology file format
 
 The top of the file is a machines table. Narrative content — notes, startup commands, benchmark results — follows below it.
@@ -123,6 +131,12 @@ For each LLM Node, add a section below the table with:
 - Benchmark results table
 
 The `last-running` note per model records the last time a model was confirmed live — keeping live state out of the primary table, which describes installed capacity only.
+
+### Extending the topology for dependent skills
+
+Dependent skills can add columns to the machines table to store skill-specific metadata alongside the node it applies to. For example, ask-foreign-agent-skill adds a `hermes_key_env` column containing the name of the env var (in `$SKILLS_HOME/.env`) that holds the Hermes bearer token for that node. The skill reads the column value, looks up the env var, and uses it — no node names hardcoded in skill code.
+
+Columns that load-topology-skill does not recognise are preserved across syncs. Add whatever columns a skill needs; document them in that skill's README.
 
 ### Network layer
 
