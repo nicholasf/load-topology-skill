@@ -2,7 +2,7 @@
 
 Reads `$TOPOLOGY_PATH` (default `$SKILLS_HOME/topology.md`, fallback `~/.agents/skills/topology.md`) to enumerate available machines and models, then helps the user start a chosen model or refresh the topology.
 
-## Step 0 — Load the skills env
+## Step 1 — Load the skills env
 
 Before reading the topology, check for `$SKILLS_HOME/.env` and load it if present:
 
@@ -12,7 +12,7 @@ Before reading the topology, check for `$SKILLS_HOME/.env` and load it if presen
 
 This file holds secrets and per-node configuration (API keys, URLs) used by skills that depend on this one. It is gitignored and machine-local. See `.env.example` in this repo for the expected format.
 
-## Step 1 — Read the topology file
+## Step 2 — Read the topology file
 
 Resolve the path: `$TOPOLOGY_PATH` → `$SKILLS_HOME/topology.md` → `~/.agents/skills/topology.md`.
 
@@ -20,11 +20,11 @@ If the file does not exist, tell the user and stop. Do not proceed with cached o
 
 Read the full file.
 
-## Step 2 — Present the machines table
+## Step 3 — Present the machines table
 
 Display the machines table clearly. Note which machines have `ssh: yes` — these are the ones agents can act on remotely. Note the last-refreshed date if present.
 
-## Step 3 — Present available models
+## Step 4 — Present available models
 
 For each LLM Node, locate its models table. Present all available models as a numbered list:
 
@@ -37,7 +37,7 @@ Available models:
 
 Note any `last-running` entries so the user can see what was most recently active.
 
-## Step 4 — Check what is currently running (optional)
+## Step 5 — Check what is currently running (optional)
 
 If the user wants a live check, run:
 
@@ -53,7 +53,7 @@ ssh $AGENT_SSH_USER@<hostname> "pgrep -a llama-server"
 
 Report the result.
 
-## Step 5 — Start a model
+## Step 6 — Start a model
 
 Ask the user which model they want to load (or confirm the current one is fine).
 
@@ -67,7 +67,7 @@ ssh $AGENT_SSH_USER@<hostname> "pkill -f llama-server"
 
 Offer to execute the startup command directly if the user confirms.
 
-## Step 6 — Confirm the model is live
+## Step 7 — Confirm the model is live
 
 After starting, verify:
 
@@ -77,7 +77,7 @@ curl -s http://<hostname>:9337/v1/models
 
 Report the model name returned. The model is ready when this returns a valid JSON response.
 
-## Step 7 — Hand off
+## Step 8 — Hand off
 
 Inform the user which machine and model are active, the API endpoint (e.g. `http://gollum:9337`), and that tasks can now be delegated using the **track-tasks-skill**.
 
