@@ -34,19 +34,12 @@ def discovered(hostname, tailscale_ip='100.1.2.3', os_name='Linux', online=True,
 
 # -- get_topology_path --
 
-def test_get_topology_path_uses_topology_path_env(monkeypatch):
-    monkeypatch.setenv('TOPOLOGY_PATH', '/custom/topology.md')
-    assert get_topology_path() == '/custom/topology.md'
-
-
 def test_get_topology_path_falls_back_to_skills_home(monkeypatch):
-    monkeypatch.delenv('TOPOLOGY_PATH', raising=False)
     monkeypatch.setenv('SKILLS_HOME', '/my/skills')
     assert get_topology_path() == '/my/skills/topology.md'
 
 
 def test_get_topology_path_defaults_when_both_unset(monkeypatch):
-    monkeypatch.delenv('TOPOLOGY_PATH', raising=False)
     monkeypatch.delenv('SKILLS_HOME', raising=False)
     assert get_topology_path() == os.path.expanduser('~/.agents/skills/topology.md')
 

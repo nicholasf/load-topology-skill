@@ -16,7 +16,7 @@ Once the [prerequisites](#prerequisites) are in place, the skill works through t
 /load-topology sync
 ```
 
-Runs `scripts/sync.py`, which queries Tailscale for current IPs and online status, archives the previous file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same directory, and rewrites the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
+Runs `scripts/sync.py`, which queries Tailscale for current IPs and online status, writes a single `topology-backup.md` before rewriting, and updates the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
 
 
 **Read the topology**
@@ -90,9 +90,7 @@ The skill assumes GGUFs live at `~/.local/share/gguf/` on each LLM Node. Set `$G
 
 **`$AGENT_SSH_USER`** — your username across all machines in the mesh. Every LLM Node and Mesh Node must have this user configured with passwordless key-based SSH auth before agents can act on them. An optional `ssh-user` column in the topology table overrides this per machine for the occasional exception.
 
-**`$TOPOLOGY_PATH`** — path to your `topology.md` file. Default: `$SKILLS_HOME/topology.md`. Keep this outside any git repository — see [Privacy](#privacy).
-
-**`$SKILLS_HOME`** — see [manage-skills-skill](https://github.com/nicholasf/manage-skills-skill).
+**`$SKILLS_HOME`** — see [manage-skills-skill](https://github.com/nicholasf/manage-skills-skill). All topology files live here.
 
 Add these to your `~/.zshrc` or `~/.bashrc`.
 
@@ -143,18 +141,21 @@ An LLM Node is any machine that runs inference workloads. The skill assumes:
 - `llama-server` (llama.cpp) and/or Ollama are installed
 - Port `9337` for llama-server, port `11434` for Ollama
 
-For each LLM Node, add a section below the table with:
-- A models table: model name, size, quantisation, backend, port, last-running
-- Startup commands (one named anchor per model/machine combination)
-- Benchmark results table
+Run `/load-topology discover` to auto-populate live state for all LLM Nodes. This writes two
+sections into `topology.md`:
 
-The `last-running` note per model records the last time a model was confirmed live — keeping live state out of the primary table, which describes installed capacity only.
+- `## Live State` — running backends, loaded models, and GGUF inventory per node
+- `## Agent State` — liveness of configured agent endpoints (Hermes, Goose, etc.)
+
+You can also add manual sections below the table for startup commands and notes — one named
+anchor per model/machine combination (e.g. `### pond — qwen3-coder-30b`). These are preserved
+across syncs and discover runs.
 
 ### Extending the topology for dependent skills
 
-Dependent skills can add columns to the machines table to store skill-specific metadata alongside the node it applies to. For example, ask-foreign-agent-skill adds a `hermes_key_env` column containing the name of the env var (in `$SKILLS_HOME/.env`) that holds the Hermes bearer token for that node. The skill reads the column value, looks up the env var, and uses it — no node names hardcoded in skill code.
-
-Columns that load-topology-skill does not recognise are preserved across syncs. Add whatever columns a skill needs; document them in that skill's README.
+Each dependent skill writes its own sidecar file — `topology-{skill-name}.md` in `$SKILLS_HOME`.
+This keeps `topology.md` clean and prevents skills from interfering with each other's data. See
+[Sidecar files](#sidecar-files).
 
 ### Network layer
 
@@ -237,12 +238,11 @@ without risking interference with other skills.
 hostnames, IP addresses, and SSH usernames. Treat it like Terraform state — it can be
 regenerated, and it is nobody else's business.
 
-These patterns cover the main file, sidecar files, and archives:
+These patterns cover the main file, sidecars, and the backup:
 
 ```
 topology.md
 topology-*.md
-*-topology.md
 ```
 
 If your topology lives in a git repository, verify these patterns are present.
