@@ -171,6 +171,27 @@ When the user says `/load-topology benchmark <hostname> <model>` or "benchmark l
 
 ---
 
+## Show subcommand
+
+When the user says `/load-topology show` or "show topology" or "show all topology files":
+
+1. Run:
+   ```bash
+   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/show.py"
+   ```
+
+2. The script reads `topology.md` followed by every `topology-*.md` sidecar file in
+   `$SKILLS_HOME`, printing them in sequence separated by a divider.
+
+3. Present the combined output to the user. Highlight any sidecar files found so it is
+   clear which skill owns which data.
+
+Use this when the user wants a full picture of all topology data in one view — machines
+table, live state, agent state, and any skill-specific sidecars — without running a
+fresh probe.
+
+---
+
 ## Notes
 
 - The topology file is the source of truth. Always read it fresh — do not rely on cached knowledge.

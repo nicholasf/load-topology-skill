@@ -8,7 +8,7 @@ This is a home lab tool. It does not try to solve enterprise concerns like multi
 
 ## Getting started
 
-Once the [prerequisites](#prerequisites) are in place, the skill works through three commands in Claude Code.
+Once the [prerequisites](#prerequisites) are in place, the skill works through these commands in Claude Code.
 
 **Sync the topology**
 
@@ -16,7 +16,7 @@ Once the [prerequisites](#prerequisites) are in place, the skill works through t
 /load-topology sync
 ```
 
-Runs `scripts/sync.py`, which queries Tailscale for current IPs and online status, writes a single `topology-backup.md` before rewriting, and updates the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
+Queries Tailscale for current IPs and online status, writes `topology-backup.md` before rewriting, and updates the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
 
 
 **Read the topology**
@@ -52,6 +52,16 @@ agent endpoints (Hermes, Goose). Results are written into two sections in `topol
 
 Run this at the start of a session to get an accurate picture of what is installed and running.
 The skill's main workflow uses these sections as the primary source for model and agent state.
+
+**Show all topology files**
+
+```
+/load-topology show
+```
+
+Prints `topology.md` and every `topology-*.md` sidecar file in `$SKILLS_HOME` as a single
+combined view. Use this when you want to see the full picture — machines table, live state,
+agent state, and any skill-specific sidecars — without running a fresh probe.
 
 **Populating topology.md for the first time**
 
@@ -177,7 +187,7 @@ To sync an existing topology with current Tailscale data:
 python3 scripts/sync.py
 ```
 
-This archives the current file as `YYYY-MM-DDTHH-MM-SS-topology.md` in the same directory, then rebuilds the machines table from fresh discovery data, preserving all manually-maintained columns.
+This writes `topology-backup.md` in the same directory before rewriting, then rebuilds the machines table from fresh discovery data, preserving all manually-maintained columns.
 
 Or use the slash command in Claude Code:
 
