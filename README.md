@@ -90,7 +90,7 @@ The skill assumes GGUFs live at `~/.local/share/gguf/` on each LLM Node. Set `$G
 
 **`$AGENT_SSH_USER`** — your username across all machines in the mesh. Every LLM Node and Mesh Node must have this user configured with passwordless key-based SSH auth before agents can act on them. An optional `ssh-user` column in the topology table overrides this per machine for the occasional exception.
 
-**`$TOPOLOGY_PATH`** — path to your `topology.md` file. Default: `$SKILLS_HOME/topology.md`. Keep this outside any git repository — see [Privacy](#privacy).
+**`$TOPOLOGY_PATH`** — optional override for the path to `topology.md`. Defaults to `$SKILLS_HOME/topology.md`. Only set this if your topology lives somewhere other than `$SKILLS_HOME`.
 
 **`$SKILLS_HOME`** — see [manage-skills-skill](https://github.com/nicholasf/manage-skills-skill).
 
@@ -143,18 +143,25 @@ An LLM Node is any machine that runs inference workloads. The skill assumes:
 - `llama-server` (llama.cpp) and/or Ollama are installed
 - Port `9337` for llama-server, port `11434` for Ollama
 
-For each LLM Node, add a section below the table with:
-- A models table: model name, size, quantisation, backend, port, last-running
-- Startup commands (one named anchor per model/machine combination)
-- Benchmark results table
+Run `/load-topology discover` to auto-populate live state for all LLM Nodes. This writes two
+sections into `topology.md`:
 
-The `last-running` note per model records the last time a model was confirmed live — keeping live state out of the primary table, which describes installed capacity only.
+- `## Live State` — running backends, loaded models, and GGUF inventory per node
+- `## Agent State` — liveness of configured agent endpoints (Hermes, Goose, etc.)
+
+You can also add manual sections below the table for startup commands and notes — one named
+anchor per model/machine combination (e.g. `### pond — qwen3-coder-30b`). These are preserved
+across syncs and discover runs.
 
 ### Extending the topology for dependent skills
 
-Dependent skills can add columns to the machines table to store skill-specific metadata alongside the node it applies to. For example, ask-foreign-agent-skill adds a `hermes_key_env` column containing the name of the env var (in `$SKILLS_HOME/.env`) that holds the Hermes bearer token for that node. The skill reads the column value, looks up the env var, and uses it — no node names hardcoded in skill code.
+The preferred extension pattern is a **sidecar file** — see [Sidecar files](#sidecar-files).
+Each dependent skill writes its own `topology-{skill-name}.md` in `$SKILLS_HOME`. This keeps
+`topology.md` clean and prevents skills from interfering with each other's data.
 
-Columns that load-topology-skill does not recognise are preserved across syncs. Add whatever columns a skill needs; document them in that skill's README.
+For simple per-node config values (a gateway URL, an env var name), adding a column to the
+machines table is still supported and columns are preserved across syncs. Use this sparingly —
+prefer sidecars for anything beyond a single key-value per machine.
 
 ### Network layer
 
