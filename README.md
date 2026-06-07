@@ -37,14 +37,31 @@ Reads `topology.md`, presents the machines table and available models, and lets 
 
 Runs `scripts/benchmark_llm.py` against a live llama-server on the named host, measures TTFT and token throughput across three runs, and writes the results into the `## LLM Benchmarks` table in `topology.md`. Run this after loading a new GGUF so the results live alongside the rest of the node's data.
 
+**Discover nodes**
+
+```
+/load-topology discover
+```
+
+Probes every machine in the topology over SSH and HTTP. For each node it collects GPU/VRAM,
+local IP, GGUF inventory, running inference backends (llama-server and Ollama), and configured
+agent endpoints (Hermes, Goose). Results are written into two sections in `topology.md`:
+
+- `## Live State` — inference backend status and GGUF inventory per node
+- `## Agent State` — per-node agent liveness
+
+Run this at the start of a session to get an accurate picture of what is installed and running.
+The skill's main workflow uses these sections as the primary source for model and agent state.
+
 **Populating topology.md for the first time**
 
 The typical first-run sequence is:
 
 1. Copy the [example topology format](#topology-file-format) and fill in your machines manually.
 2. Run `/load-topology sync` to pull in live Tailscale IPs and mark machines online or offline.
-3. Start llama-server on an LLM Node (the skill will show you the startup command).
-4. Run `/load-topology benchmark <hostname> <model>` to record baseline performance.
+3. Run `/load-topology discover` to populate live state, hardware details, and agent status.
+4. Start llama-server on an LLM Node (the skill will show you the startup command).
+5. Run `/load-topology benchmark <hostname> <model>` to record baseline performance.
 
 **Conventions assumed**
 
@@ -199,14 +216,32 @@ All tests use the same API call pattern — swap the endpoint and model name for
 
 **Metrics to record:** date, backend, model, test, language, total time, token count, gen t/s, prompt t/s, processor.
 
+## Sidecar files
+
+Dependent skills can write their own data alongside `topology.md` rather than adding columns
+to the machines table. The convention is `topology-{skill-name}.md` in `$SKILLS_HOME`:
+
+```
+$SKILLS_HOME/topology.md                      # machines table — owned by this skill
+$SKILLS_HOME/topology-ask-foreign-agent.md    # agent endpoints — owned by that skill
+$SKILLS_HOME/topology-live-state.md           # example sidecar from another skill
+```
+
+The load-topology skill's command reads all `topology-*.md` files alongside `topology.md`
+and synthesises a unified view. Each skill owns exactly one file and can rewrite it freely
+without risking interference with other skills.
+
 ## Privacy
 
-`topology.md` and its archives must not be committed to version control. The file contains hostnames, IP addresses, and SSH usernames. Treat it like Terraform state — it can be regenerated, and it is nobody else's business.
+`topology.md` and its archives must not be committed to version control. The file contains
+hostnames, IP addresses, and SSH usernames. Treat it like Terraform state — it can be
+regenerated, and it is nobody else's business.
 
-Both patterns are in `.gitignore`:
+These patterns cover the main file, sidecar files, and archives:
 
 ```
 topology.md
+topology-*.md
 *-topology.md
 ```
 
