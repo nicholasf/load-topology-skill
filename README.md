@@ -90,9 +90,7 @@ The skill assumes GGUFs live at `~/.local/share/gguf/` on each LLM Node. Set `$G
 
 **`$AGENT_SSH_USER`** — your username across all machines in the mesh. Every LLM Node and Mesh Node must have this user configured with passwordless key-based SSH auth before agents can act on them. An optional `ssh-user` column in the topology table overrides this per machine for the occasional exception.
 
-**`$TOPOLOGY_PATH`** — optional override for the path to `topology.md`. Defaults to `$SKILLS_HOME/topology.md`. Only set this if your topology lives somewhere other than `$SKILLS_HOME`.
-
-**`$SKILLS_HOME`** — see [manage-skills-skill](https://github.com/nicholasf/manage-skills-skill).
+**`$SKILLS_HOME`** — see [manage-skills-skill](https://github.com/nicholasf/manage-skills-skill). All topology files live here.
 
 Add these to your `~/.zshrc` or `~/.bashrc`.
 
@@ -155,13 +153,9 @@ across syncs and discover runs.
 
 ### Extending the topology for dependent skills
 
-The preferred extension pattern is a **sidecar file** — see [Sidecar files](#sidecar-files).
-Each dependent skill writes its own `topology-{skill-name}.md` in `$SKILLS_HOME`. This keeps
-`topology.md` clean and prevents skills from interfering with each other's data.
-
-For simple per-node config values (a gateway URL, an env var name), adding a column to the
-machines table is still supported and columns are preserved across syncs. Use this sparingly —
-prefer sidecars for anything beyond a single key-value per machine.
+Each dependent skill writes its own sidecar file — `topology-{skill-name}.md` in `$SKILLS_HOME`.
+This keeps `topology.md` clean and prevents skills from interfering with each other's data. See
+[Sidecar files](#sidecar-files).
 
 ### Network layer
 
