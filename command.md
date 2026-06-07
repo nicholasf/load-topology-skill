@@ -2,6 +2,16 @@
 
 Reads `$TOPOLOGY_PATH` (default `$SKILLS_HOME/topology.md`, fallback `~/.agents/skills/topology.md`) to enumerate available machines and models, then helps the user start a chosen model or refresh the topology.
 
+## Step 0 — Load the skills env
+
+Before reading the topology, check for `$SKILLS_HOME/.env` and load it if present:
+
+```bash
+[ -f "${SKILLS_HOME:-$HOME/.agents/skills}/.env" ] && source "${SKILLS_HOME:-$HOME/.agents/skills}/.env"
+```
+
+This file holds secrets and per-node configuration (API keys, URLs) used by skills that depend on this one. It is gitignored and machine-local. See `.env.example` in this repo for the expected format.
+
 ## Step 1 — Read the topology file
 
 Resolve the path: `$TOPOLOGY_PATH` → `$SKILLS_HOME/topology.md` → `~/.agents/skills/topology.md`.
@@ -120,3 +130,25 @@ When the user says `/load-topology benchmark <hostname> <model>` or "benchmark l
 - The topology file is the source of truth. Always read it fresh — do not rely on cached knowledge.
 - Live model state is ephemeral. The topology records installed capacity; always check what is actually running before assuming.
 - If the user asks about mesh-llm or multi-node tensor-split, refer them to the mesh-llm sections of the topology file.
+
+---
+
+## Topology extension convention
+
+Skills that depend on `load-topology-skill` may add columns to the topology
+table to record their own per-node configuration. The base table covers
+hostnames, IPs, SSH access, and model availability. Dependent skills extend it
+as needed — for example:
+
+| skill | columns added |
+|---|---|
+| `ask-foreign-agent-skill` | `hermes_gateway`, `hermes_key_env` |
+
+`hermes_gateway` is the HTTP URL of the Hermes agent server on that node (e.g.
+`http://pond:8642`). `hermes_key_env` is the name of the env var in
+`$SKILLS_HOME/.env` that holds the Bearer token for that gateway (e.g.
+`POND_HERMES_KEY`).
+
+Any skill can follow this pattern: add columns to `topology.md` for structural
+config, put secrets in `$SKILLS_HOME/.env` under a predictable name, and
+reference the env var name in the table so the skill knows where to look.
