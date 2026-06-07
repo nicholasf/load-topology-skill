@@ -24,22 +24,40 @@ Read the full file.
 
 Display the machines table clearly. Note which machines have `ssh: yes` — these are the ones agents can act on remotely. Note the last-refreshed date if present.
 
-## Step 4 — Present available models
+## Step 4 — Present available models and live state
 
-For each LLM Node, locate its models table. Present all available models as a numbered list:
+If the topology file contains a `## Live State` section, use it as the primary source — it
+reflects the last discover run and shows what is actually installed and running per node.
+Present it as a numbered list:
 
 ```
 Available models:
 
-  1. qwen3-coder-30b   on gollum  (llama-server / ROCm,  port 9337)
-  2. qwen2.5-coder-32b on gollum  (llama-server / ROCm,  port 9337)
+  1. qwen3-coder-30b.gguf  on pond    (llama-server / CUDA, port 9337) — up
+  2. qwen3-coder:30b        on gollum  (Ollama / ROCm,       port 11434) — up
+  3. qwen2.5-coder:14b      on gollum  (Ollama / ROCm,       port 11434) — up
 ```
 
-Note any `last-running` entries so the user can see what was most recently active.
+If there is no `## Live State` section, fall back to per-node model sections in the file,
+or suggest the user run `/load-topology discover` first.
 
-## Step 5 — Check what is currently running (optional)
+## Step 4b — Present agent state
 
-If the user wants a live check, run:
+If the topology file contains an `## Agent State` section, present it alongside the models:
+
+```
+Agents:
+
+  pond    hermes  http://pond:8642  — up   (process: running)
+  pond    goose   ws://pond:3284    — down (process: not found)
+```
+
+Also check for any `topology-*.md` sidecar files in `$SKILLS_HOME` — these are written by
+dependent skills (e.g. ask-foreign-agent). Read and summarise any that are present.
+
+## Step 5 — Verify live state if needed
+
+If the user wants a fresh live check beyond what `## Live State` shows, run:
 
 ```bash
 curl -s http://<hostname>:9337/v1/models
@@ -80,6 +98,33 @@ Report the model name returned. The model is ready when this returns a valid JSO
 ## Step 8 — Hand off
 
 Inform the user which machine and model are active, the API endpoint (e.g. `http://gollum:9337`), and that tasks can now be delegated using the **track-tasks-skill**.
+
+---
+
+## Discover subcommand
+
+When the user says `/load-topology discover` or "discover topology" or "probe nodes":
+
+1. Run:
+   ```bash
+   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/discover.py"
+   ```
+
+2. The script probes every machine in the machines table:
+   - HTTP: llama-server (:9337) and Ollama (:11434) for running models
+   - SSH: gpu, vram, local-ip, GGUF inventory at `~/.local/share/gguf/`
+   - HTTP: configured agent endpoints (`hermes_gateway`, `goose_acp_url` columns)
+   - SSH: pgrep scan for known agent processes (hermes, goose, aider)
+
+3. It writes two sections into `topology.md`:
+   - `## Live State` — inference backend status and GGUF inventory per node
+   - `## Agent State` — per-node agent liveness
+
+4. Re-read the topology file and present the updated `## Live State` and `## Agent State`
+   tables to the user.
+
+Run discover at the start of a session whenever you need an accurate picture of what is
+actually installed and running, rather than relying on a stale topology.
 
 ---
 
