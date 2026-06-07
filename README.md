@@ -52,6 +52,7 @@ The typical first-run sequence is:
 - `llama-server` (llama.cpp) listens on port `9337`; Ollama listens on port `11434`.
 - All LLM Nodes and Mesh Nodes are reachable over SSH as `$AGENT_SSH_USER` with key-based auth.
 - Tailscale hostnames are used for SSH and API calls; the machines table keeps both Tailscale and local IPs so the skill degrades gracefully if Tailscale is unavailable.
+- **Agent naming:** Refer to a running agent as `<machine>-<llm>-<runtime>`, where runtime is the specific agent platform. Examples: `pond-qwen-goose`, `pond-qwen-hermes`, `dtv-claude-code`. This makes it unambiguous which machine, model, and runtime is acting at any point.
 
 ## Prerequisites
 
