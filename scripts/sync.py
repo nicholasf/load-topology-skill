@@ -27,7 +27,11 @@ def archive(topology_path: str) -> str:
 
 
 def parse_table(lines: list[str]) -> tuple[int, int, list[dict]]:
-    """Return (table_start, table_end, rows). table_end is the index after the last table line."""
+    """Return (table_start, table_end, rows). table_end is the index after the last table line.
+
+    Reads all columns from the actual header row so that extra columns added by
+    dependent skills (e.g. hermes_gateway, goose_acp_url) are preserved across syncs.
+    """
     table_start = -1
     for i, line in enumerate(lines):
         if line.strip().startswith('| name |'):
@@ -36,6 +40,9 @@ def parse_table(lines: list[str]) -> tuple[int, int, list[dict]]:
 
     if table_start == -1:
         return -1, -1, []
+
+    # Read actual column names from the header, not the fixed COLUMNS list
+    actual_cols = [p.strip() for p in lines[table_start].split('|')[1:-1]]
 
     # table_end defaults to end of file in case there's no blank line after the table
     table_end = len(lines)
@@ -50,14 +57,17 @@ def parse_table(lines: list[str]) -> tuple[int, int, list[dict]]:
         if not line.strip() or not line.startswith('|'):
             continue
         parts = [p.strip() for p in line.split('|')[1:-1]]
-        if len(parts) < len(COLUMNS):
-            parts += [''] * (len(COLUMNS) - len(parts))
-        rows.append(dict(zip(COLUMNS, parts)))
+        while len(parts) < len(actual_cols):
+            parts.append('—')
+        rows.append(dict(zip(actual_cols, parts[:len(actual_cols)])))
 
     return table_start, table_end, rows
 
 
 def merge(existing_rows: list[dict], discovered: list[dict]) -> tuple[list[dict], list[str]]:
+    # Derive column set from existing rows so extra columns are preserved for new machines too
+    all_cols = list(dict.fromkeys(col for row in existing_rows for col in row)) if existing_rows else COLUMNS
+
     existing_by_hostname = {r['hostname']: r for r in existing_rows}
     discovered_hostnames = {m['hostname'] for m in discovered}
     changes = []
@@ -73,7 +83,7 @@ def merge(existing_rows: list[dict], discovered: list[dict]) -> tuple[list[dict]
             if old_ip != machine['tailscale_ip']:
                 changes.append(f"  {hostname}: tailscale-ip {old_ip} → {machine['tailscale_ip']}")
         else:
-            row = {col: '—' for col in COLUMNS}
+            row = {col: '—' for col in all_cols}
             row['hostname'] = hostname
             row['tailscale-ip'] = machine['tailscale_ip']
             row['os'] = machine['os']
@@ -91,11 +101,17 @@ def merge(existing_rows: list[dict], discovered: list[dict]) -> tuple[list[dict]
 
 
 def build_table(rows: list[dict]) -> list[str]:
-    header = '| ' + ' | '.join(COLUMNS) + ' |'
-    separator = '|' + '|'.join('---' for _ in COLUMNS) + '|'
+    # Preserve all columns from the rows; keep core COLUMNS order, extras appended
+    if rows:
+        seen = list(dict.fromkeys(col for row in rows for col in row))
+        cols = [c for c in COLUMNS if c in seen] + [c for c in seen if c not in COLUMNS]
+    else:
+        cols = COLUMNS
+    header = '| ' + ' | '.join(cols) + ' |'
+    separator = '|' + '|'.join('---' for _ in cols) + '|'
     lines = [header, separator]
     for row in rows:
-        lines.append('| ' + ' | '.join(row.get(col, '—') for col in COLUMNS) + ' |')
+        lines.append('| ' + ' | '.join(row.get(col, '—') for col in cols) + ' |')
     return lines
 
 
