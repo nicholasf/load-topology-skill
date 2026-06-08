@@ -26,19 +26,20 @@ Display the machines table clearly. Note which machines have `ssh: yes` — thes
 
 ## Step 4 — Present available models and live state
 
-If the topology file contains a `## Live State` section, use it as the primary source — it
-reflects the last discover run and shows what is actually installed and running per node.
+If the topology file contains a `## Model State` section, use it as the primary source — it
+reflects the last discover run and shows what is actually installed and running per node,
+including the context window for each backend.
 Present it as a numbered list:
 
 ```
 Available models:
 
-  1. qwen3-coder-30b.gguf  on pond    (llama-server / CUDA, port 9337) — up
-  2. qwen3-coder:30b        on gollum  (Ollama / ROCm,       port 11434) — up
-  3. qwen2.5-coder:14b      on gollum  (Ollama / ROCm,       port 11434) — up
+  1. qwen3-coder-30b.gguf  on pond    (llama-server / CUDA, port 9337, ctx 65536) — up
+  2. qwen3-coder:30b        on gollum  (Ollama / ROCm,       port 11434, ctx 131072) — up
+  3. qwen2.5-coder:14b      on gollum  (Ollama / ROCm,       port 11434, ctx 32768) — up
 ```
 
-If there is no `## Live State` section, fall back to per-node model sections in the file,
+If there is no `## Model State` section, fall back to per-node model sections in the file,
 or suggest the user run `/load-topology discover` first.
 
 ## Step 4b — Present agent state
@@ -117,10 +118,10 @@ When the user says `/load-topology discover` or "discover topology" or "probe no
    - SSH: pgrep scan for known agent processes (hermes, goose, aider)
 
 3. It writes two sections into `topology.md`:
-   - `## Live State` — inference backend status and GGUF inventory per node
-   - `## Agent State` — per-node agent liveness
+   - `## Model State` — inference backend status, models, context windows, and GGUF inventory per node
+   - `## Agent State` — per-node agent liveness and `reasoning_buffer` (preserved from prior runs)
 
-4. Re-read the topology file and present the updated `## Live State` and `## Agent State`
+4. Re-read the topology file and present the updated `## Model State` and `## Agent State`
    tables to the user.
 
 Run discover at the start of a session whenever you need an accurate picture of what is
@@ -195,7 +196,7 @@ fresh probe.
 ## Notes
 
 - The topology file is the source of truth. Always read it fresh — do not rely on cached knowledge.
-- Live model state is ephemeral. The topology records installed capacity; always check what is actually running before assuming.
+- Model state is ephemeral. The topology records installed capacity; always check what is actually running before assuming.
 - If the user asks about mesh-llm or multi-node tensor-split, refer them to the mesh-llm sections of the topology file.
 
 ---
@@ -207,14 +208,20 @@ table to record their own per-node configuration. The base table covers
 hostnames, IPs, SSH access, and model availability. Dependent skills extend it
 as needed — for example:
 
-| skill | columns added |
-|---|---|
-| `ask-foreign-agent-skill` | `hermes_gateway`, `hermes_key_env` |
+| skill | section | columns added |
+|---|---|---|
+| `ask-foreign-agent-skill` | machines table | `hermes_gateway`, `hermes_key_env` |
+| `ask-remote-agent-skill` | `## Agent State` | `reasoning_buffer` |
 
 `hermes_gateway` is the HTTP URL of the Hermes agent server on that node (e.g.
 `http://pond:8642`). `hermes_key_env` is the name of the env var in
 `$SKILLS_HOME/.env` that holds the Bearer token for that gateway (e.g.
 `POND_HERMES_KEY`).
+
+`reasoning_buffer` is the estimated token overhead for the model's chain-of-thought
+reasoning before it writes output (e.g. `12000` for Qwen3 with thinking enabled,
+`0` for models without extended thinking). It is set via the `topology` subcommand
+of `ask-remote-agent-skill` and preserved across `discover` runs.
 
 Any skill can follow this pattern: add columns to `topology.md` for structural
 config, put secrets in `$SKILLS_HOME/.env` under a predictable name, and

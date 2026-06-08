@@ -11,8 +11,8 @@ Probes every machine in the machines table:
   - SSH:   pgrep scan for known agent processes
 
 Writes/replaces two sections in topology.md:
-  ## Live State   — inference backend status and GGUF inventory per node
-  ## Agent State  — per-node agent liveness
+  ## Model State  — inference backend status, models, and context windows per node
+  ## Agent State  — per-node agent liveness and reasoning_buffer
 """
 
 import json
@@ -28,11 +28,11 @@ from sync import get_topology_path
 
 AGENT_SSH_USER = os.environ.get('AGENT_SSH_USER', 'nicholasf')
 
-LIVE_STATE_HEADER = '## Live State'
+MODEL_STATE_HEADER = '## Model State'
 AGENT_STATE_HEADER = '## Agent State'
 
-LIVE_COLS = ['hostname', 'backend', 'port', 'models', 'status', 'last-seen']
-AGENT_COLS = ['hostname', 'agent', 'endpoint', 'status', 'process', 'last-seen']
+MODEL_COLS = ['hostname', 'backend', 'port', 'models', 'context_window', 'status', 'last-seen']
+AGENT_COLS = ['hostname', 'agent', 'endpoint', 'status', 'process', 'last-seen', 'reasoning_buffer']
 
 KNOWN_AGENT_PROCS = ['hermes', 'goose', 'aider', 'open-webui']
 
@@ -142,6 +142,57 @@ def replace_or_append(lines: list[str], header: str, content: list[str]) -> list
     return lines[:start] + content + lines[end:]
 
 
+# ── Context window probing ────────────────────────────────────────────────────
+
+def probe_llama_context_window(host: str) -> str:
+    """GET /props from llama-server; returns n_ctx as string or '—'."""
+    data = http_json(f'http://{host}:9337/props')
+    if data and 'n_ctx' in data:
+        return str(data['n_ctx'])
+    return '—'
+
+
+def probe_ollama_context_window(host: str, model: str) -> str:
+    """POST /api/show to Ollama for a specific model; returns context length or '—'."""
+    try:
+        body = json.dumps({'name': model}).encode()
+        req = urllib.request.Request(
+            f'http://{host}:11434/api/show',
+            data=body,
+            headers={'Content-Type': 'application/json'},
+            method='POST',
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read())
+        ctx = data.get('modelinfo', {}).get('llama.context_length')
+        return str(ctx) if ctx else '—'
+    except Exception:
+        return '—'
+
+
+# ── Preserved reasoning_buffer values ────────────────────────────────────────
+
+def read_existing_agent_reasoning_buffers(lines: list[str]) -> dict[tuple[str, str], str]:
+    """Read existing reasoning_buffer values from Agent State before overwriting."""
+    start, end = find_section(lines, AGENT_STATE_HEADER)
+    if start == -1:
+        return {}
+    result: dict[tuple[str, str], str] = {}
+    headers: list[str] | None = None
+    for line in lines[start:end]:
+        if line.startswith('| hostname'):
+            headers = [h.strip() for h in line.split('|')[1:-1]]
+        elif headers and line.startswith('|') and '---' not in line:
+            values = [v.strip() for v in line.split('|')[1:-1]]
+            row = dict(zip(headers, values))
+            host = row.get('hostname', '—')
+            agent = row.get('agent', '—')
+            buf = row.get('reasoning_buffer', '—')
+            if host != '—' and agent != '—':
+                result[(host, agent)] = buf
+    return result
+
+
 # ── Discovery ─────────────────────────────────────────────────────────────────
 
 def discover_hardware(host: str, user: str, os_name: str) -> dict:
@@ -189,14 +240,25 @@ def list_ggufs(host: str, user: str) -> list[str]:
 def probe_models(host: str) -> dict:
     ls_data = http_json(f'http://{host}:9337/v1/models')
     ol_data = http_json(f'http://{host}:11434/v1/models')
+
+    ls_up = bool(ls_data and 'data' in ls_data)
+    ls_models = [m['id'] for m in ls_data.get('data', [])] if ls_data else []
+    ls_ctx = probe_llama_context_window(host) if ls_up else '—'
+
+    ol_up = bool(ol_data and 'data' in ol_data)
+    ol_models = [m['id'] for m in ol_data.get('data', [])] if ol_data else []
+    ol_ctx = probe_ollama_context_window(host, ol_models[0]) if (ol_up and ol_models) else '—'
+
     return {
         'llama_server': {
-            'up': bool(ls_data and 'data' in ls_data),
-            'models': [m['id'] for m in ls_data.get('data', [])] if ls_data else [],
+            'up': ls_up,
+            'models': ls_models,
+            'context_window': ls_ctx,
         },
         'ollama': {
-            'up': bool(ol_data and 'data' in ol_data),
-            'models': [m['id'] for m in ol_data.get('data', [])] if ol_data else [],
+            'up': ol_up,
+            'models': ol_models,
+            'context_window': ol_ctx,
         },
     }
 
@@ -242,10 +304,10 @@ def probe_agents(host: str, user: str | None, row: dict) -> list[dict]:
 
 # ── Section builders ──────────────────────────────────────────────────────────
 
-def build_live_state(discoveries: dict) -> list[str]:
-    lines = [LIVE_STATE_HEADER, f'*Last updated: {ts()}*', '']
-    h = '| ' + ' | '.join(LIVE_COLS) + ' |'
-    sep = '|' + '|'.join('---' for _ in LIVE_COLS) + '|'
+def build_model_state(discoveries: dict) -> list[str]:
+    lines = [MODEL_STATE_HEADER, f'*Last updated: {ts()}*', '']
+    h = '| ' + ' | '.join(MODEL_COLS) + ' |'
+    sep = '|' + '|'.join('---' for _ in MODEL_COLS) + '|'
     lines += [h, sep]
 
     for host in sorted(discoveries):
@@ -255,16 +317,18 @@ def build_live_state(discoveries: dict) -> list[str]:
 
         ls = models.get('llama_server', {})
         model_str = ', '.join(ls.get('models', [])) if ls.get('up') else '—'
+        ctx = ls.get('context_window', '—')
         lines.append(
-            f'| {host} | llama-server | 9337 | {model_str}'
+            f'| {host} | llama-server | 9337 | {model_str} | {ctx}'
             f' | {"up" if ls.get("up") else "down"}'
             f' | {now if ls.get("up") else "—"} |'
         )
 
         ol = models.get('ollama', {})
         model_str = ', '.join(ol.get('models', [])) if ol.get('up') else '—'
+        ctx = ol.get('context_window', '—')
         lines.append(
-            f'| {host} | ollama | 11434 | {model_str}'
+            f'| {host} | ollama | 11434 | {model_str} | {ctx}'
             f' | {"up" if ol.get("up") else "down"}'
             f' | {now if ol.get("up") else "—"} |'
         )
@@ -272,13 +336,15 @@ def build_live_state(discoveries: dict) -> list[str]:
         ggufs = d.get('ggufs')
         if ggufs is not None:
             gguf_str = ', '.join(ggufs) if ggufs else '(none found)'
-            lines.append(f'| {host} | ggufs | — | {gguf_str} | installed | — |')
+            lines.append(f'| {host} | ggufs | — | {gguf_str} | — | installed | — |')
 
     lines.append('')
     return lines
 
 
-def build_agent_state(all_rows: list[dict]) -> list[str]:
+def build_agent_state(all_rows: list[dict], preserved_buffers: dict[tuple[str, str], str] | None = None) -> list[str]:
+    if preserved_buffers is None:
+        preserved_buffers = {}
     lines = [AGENT_STATE_HEADER, f'*Last updated: {ts()}*', '']
     if not all_rows:
         lines += ['*No agents configured or discovered.*', '']
@@ -287,7 +353,12 @@ def build_agent_state(all_rows: list[dict]) -> list[str]:
     sep = '|' + '|'.join('---' for _ in AGENT_COLS) + '|'
     lines += [h, sep]
     for row in all_rows:
-        lines.append('| ' + ' | '.join(str(row.get(c, '—')) for c in AGENT_COLS) + ' |')
+        host = row.get('hostname', '—')
+        agent = row.get('agent', '—')
+        buf = preserved_buffers.get((host, agent), '—')
+        row_with_buf = dict(row)
+        row_with_buf['reasoning_buffer'] = buf
+        lines.append('| ' + ' | '.join(str(row_with_buf.get(c, '—')) for c in AGENT_COLS) + ' |')
     lines.append('')
     return lines
 
@@ -307,6 +378,8 @@ def main() -> None:
     if not rows:
         print('No machines table found in topology file.', file=sys.stderr)
         sys.exit(1)
+
+    preserved_buffers = read_existing_agent_reasoning_buffers(lines)
 
     discoveries: dict[str, dict] = {}
     all_agent_rows: list[dict] = []
@@ -354,8 +427,8 @@ def main() -> None:
         new_table = build_full_table(cols, rows)
         lines = lines[:table_start] + new_table + lines[table_end:]
 
-    lines = replace_or_append(lines, LIVE_STATE_HEADER, build_live_state(discoveries))
-    lines = replace_or_append(lines, AGENT_STATE_HEADER, build_agent_state(all_agent_rows))
+    lines = replace_or_append(lines, MODEL_STATE_HEADER, build_model_state(discoveries))
+    lines = replace_or_append(lines, AGENT_STATE_HEADER, build_agent_state(all_agent_rows, preserved_buffers))
 
     with open(path, 'w') as f:
         f.write('\n'.join(lines) + '\n')
