@@ -6,66 +6,65 @@ This is a skill which relies on some [prerequisites](#prerequisites) to then let
 
 This is a home lab tool. It does not try to solve enterprise concerns like multiple SSH identities, key rotation, or multi-tenant access. It assumes you own all the machines, you have set up SSH keys, and you want your agent to know as much about your setup as you do.
 
-## Getting started
+---
 
-Once the [prerequisites](#prerequisites) are in place, the skill works through these commands in Claude Code.
-
-**Sync the topology**
-
-```
-/load-topology sync
-```
-
-Queries Tailscale for current IPs and online status, writes `topology-backup.md` before rewriting, and updates the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved. Run this after adding a machine or when IPs have changed.
-
-
-**Read the topology**
-
-Use this at the start of each session or when you want your agent to begin working with others locally.
-
-```
-/load-topology
-```
-
-Reads `topology.md`, presents the machines table and available models, and lets you start or swap a running model. This is the day-to-day entry point — use it whenever you want the agent to know what is in your mesh before delegating a workload.
-
-**Benchmark a model**
-
-```
-/load-topology benchmark <hostname> <model>
-```
-
-Runs `scripts/benchmark_llm.py` against a live llama-server on the named host, measures TTFT and token throughput across three runs, and writes the results into the `## LLM Benchmarks` table in `topology.md`. Run this after loading a new GGUF so the results live alongside the rest of the node's data.
-
-**Discover nodes**
+## Examples
 
 ```
 /load-topology discover
 ```
+Probe every node: finds running models, agents, GPU/VRAM, GGUF inventory. Do this at the start of a session.
 
-Probes every machine in the topology over SSH and HTTP. For each node it collects GPU/VRAM,
-local IP, GGUF inventory, running inference backends (llama-server and Ollama), and configured
-agent endpoints (Hermes, Goose). Results are written into two sections in `topology.md`:
+```
+/load-topology
+```
+Read the topology, show machines and models, start or swap a running model. The day-to-day entry point.
 
-- `## Live State` — inference backend status and GGUF inventory per node
-- `## Agent State` — per-node agent liveness
+```
+/load-topology sync
+```
+Pull fresh Tailscale IPs and online status into `topology.md`. Run after adding a machine or when IPs change.
 
-Run this at the start of a session to get an accurate picture of what is installed and running.
-The skill's main workflow uses these sections as the primary source for model and agent state.
-
-**Show all topology files**
+```
+/load-topology benchmark pond qwen3-coder-30b
+```
+Measure TTFT and token throughput across three runs; writes results into `topology.md`.
 
 ```
 /load-topology show
 ```
+Print the full topology — machines, live state, agent state, and all skill sidecars — in one view.
 
-Prints `topology.md` and every `topology-*.md` sidecar file in `$SKILLS_HOME` as a single
-combined view. Use this when you want to see the full picture — machines table, live state,
-agent state, and any skill-specific sidecars — without running a fresh probe.
+---
 
-**Populating topology.md for the first time**
+## Subcommands
 
-The typical first-run sequence is:
+**`/load-topology discover`**
+
+Probes every machine in the topology over SSH and HTTP. For each node it collects GPU/VRAM, local IP, GGUF inventory, running inference backends (llama-server and Ollama), and configured agent endpoints (Hermes, Goose). Results are written into two sections in `topology.md`:
+
+- `## Live State` — inference backend status and GGUF inventory per node
+- `## Agent State` — per-node agent liveness
+
+Run this at the start of a session to get an accurate picture of what is installed and running. The skill's main workflow uses these sections as the primary source for model and agent state.
+
+**`/load-topology`**
+
+Reads `topology.md`, presents the machines table and available models, and lets you start or swap a running model. Use it whenever you want the agent to know what is in your mesh before delegating a workload.
+
+**`/load-topology sync`**
+
+Queries Tailscale for current IPs and online status, writes `topology-backup.md` before rewriting, and updates the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved.
+
+**`/load-topology benchmark <hostname> <model>`**
+
+Runs `scripts/benchmark_llm.py` against a live llama-server on the named host and writes results into the `## LLM Benchmarks` table in `topology.md`.
+
+**`/load-topology show`**
+
+Prints `topology.md` and every `topology-*.md` sidecar file in `$SKILLS_HOME` as a single combined view.
+
+**First-run sequence**
 
 1. Copy the [example topology format](#topology-file-format) and fill in your machines manually.
 2. Run `/load-topology sync` to pull in live Tailscale IPs and mark machines online or offline.
@@ -73,13 +72,13 @@ The typical first-run sequence is:
 4. Start llama-server on an LLM Node (the skill will show you the startup command).
 5. Run `/load-topology benchmark <hostname> <model>` to record baseline performance.
 
-**Conventions assumed**
+**Conventions**
 
 - GGUFs are stored at `~/.local/share/gguf/` on each LLM Node (note per-machine exceptions in the topology).
 - `llama-server` (llama.cpp) listens on port `9337`; Ollama listens on port `11434`.
 - All LLM Nodes and Mesh Nodes are reachable over SSH as `$AGENT_SSH_USER` with key-based auth.
 - Tailscale hostnames are used for SSH and API calls; the machines table keeps both Tailscale and local IPs so the skill degrades gracefully if Tailscale is unavailable.
-- **Agent naming:** Refer to a running agent as `<machine>-<llm>-<runtime>`, where runtime is the specific agent platform. Examples: `pond-qwen-goose`, `pond-qwen-hermes`, `dtv-claude-code`. This makes it unambiguous which machine, model, and runtime is acting at any point.
+- **Agent handles:** Refer to a running agent as `<machine>-<llm>-<agent>` — e.g. `pond-qwen-goose`, `pond-qwen-hermes`, `gollum-mistral-hermes`. This makes it unambiguous which machine, model, and agent is acting at any point.
 
 ## Prerequisites
 
