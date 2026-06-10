@@ -1,6 +1,11 @@
 # load-topology-skill
 
-This will let you begin having conversations with your primary agent (e.g. Claude Code) so that you can ask it to do things on other machines on your network. 
+This will let you begin having conversations with your primary agent (e.g. Claude Code) so that you can ask it to do things on other machines on your network.
+
+The skill supports two network providers, set via `**Provider:**` in `topology.md`:
+
+- **`tailscale`** (default) — `sync` queries Tailscale for hostnames and IPs automatically. Tailscale must be installed and running.
+- **`manual`** — you enter IP addresses in the `local-ip` column by hand. No Tailscale required. `sync` uses those values as-is rather than querying anything external.
 
 I use it with [track-tasks](https://github.com/nicholasf/track-tasks-skill) and [ask-foreign-agent](https://github.com/nicholasf/ask-foreign-agent-skill) to assign workloads to different LLM nodes in my home network. If you use [manage-skills](https://github.com/nicholasf/manage-skills-skill) it will help you set all of these up and autoload them whenever you start a session with your agent.
 
@@ -67,7 +72,9 @@ Prints `topology.md` and every `topology-*.md` sidecar file in `$SKILLS_HOME` as
 **First-run sequence**
 
 1. Copy the [example topology format](#topology-file-format) and fill in your machines manually.
-2. Run `/load-topology sync` to pull in live Tailscale IPs and mark machines online or offline.
+2. Set `**Provider:**` in the metadata block:
+   - **Tailscale:** run `/load-topology sync` to pull live IPs and mark machines online or offline.
+   - **Manual:** fill in the `local-ip` column yourself, then run `/load-topology sync` to validate and timestamp the topology.
 3. Run `/load-topology discover` to populate live state, hardware details, and agent status.
 4. Start llama-server on an LLM Node (the skill will show you the startup command).
 5. Run `/load-topology benchmark <hostname> <model>` to record baseline performance.
@@ -119,8 +126,11 @@ The top of the file is a machines table. Narrative content — notes, startup co
 
 ```
 **Schema version:** 1
+**Provider:** tailscale
 **Last refreshed:** 2026-06-06T10:00:00
 ```
+
+- `**Provider:**` — `tailscale` (default) or `manual`. Controls how `sync` resolves IPs. Omit to default to `tailscale`.
 
 ### Machines table
 
@@ -168,7 +178,13 @@ This keeps `topology.md` clean and prevents skills from interfering with each ot
 
 ### Network layer
 
-The reference implementation uses Tailscale — machines are reachable by hostname anywhere on the mesh, no port forwarding needed. The discovery script and topology format are network-agnostic; another provider (ZeroTier, plain SSH config) can be substituted.
+Two providers are supported, controlled by the `**Provider:**` field in the topology metadata:
+
+**`tailscale`** (default when the field is absent)
+Machines are reachable by Tailscale hostname anywhere on the mesh — no port forwarding needed. `sync` calls `tailscale status --json` to refresh IPs and online status. The `tailscale-ip` column is updated automatically.
+
+**`manual`**
+No mesh software required. You populate the `local-ip` column yourself. When you run `sync`, the skill reads those IPs directly rather than querying any external tool. Useful for plain LAN setups or networks where Tailscale is not available. Add `**Provider:** manual` to the topology metadata block to activate this mode.
 
 ## Building and syncing your topology
 
