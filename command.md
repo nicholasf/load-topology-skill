@@ -16,7 +16,15 @@ This file holds secrets and per-node configuration (API keys, URLs) used by skil
 
 Resolve the path: `$TOPOLOGY_PATH` → `$SKILLS_HOME/topology.md` → `~/.agents/skills/topology.md`.
 
-If the file does not exist, tell the user and stop. Do not proceed with cached or assumed knowledge.
+If the file does not exist, run the init script to guide first-time setup:
+
+```bash
+python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/init.py"
+```
+
+The script asks the user to choose a provider (Tailscale or manual), collects any required input, writes `topology.md`, and runs sync automatically. Once it exits successfully, continue to Step 3 with the freshly written file.
+
+Do not proceed with cached or assumed knowledge if init fails.
 
 Read the full file.
 

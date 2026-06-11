@@ -61,6 +61,28 @@ class TailscaleProvider(NetworkProvider):
         }
 
 
+class ManualProvider(NetworkProvider):
+    """Provider for networks where IPs are entered by hand rather than discovered.
+
+    Each machine dict must have 'hostname' and 'ip'; 'os' is optional.
+    """
+
+    def __init__(self, machines: list[dict]):
+        self._machines = machines
+
+    def discover(self) -> list[dict]:
+        return [
+            {
+                'hostname': m['hostname'],
+                'tailscale_ip': m['ip'],
+                'os': m.get('os', ''),
+                'online': True,
+                'is_self': False,
+            }
+            for m in self._machines
+        ]
+
+
 def main():
     try:
         machines = TailscaleProvider().discover()
