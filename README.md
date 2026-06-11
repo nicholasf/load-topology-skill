@@ -1,13 +1,29 @@
 # load-topology-skill
 
-This will let you begin having conversations with your primary agent (e.g. Claude Code) so that you can ask it to do things on other machines on your network.
+This will let you begin having conversations with your primary agent (e.g. Claude Code) so that you can ask it to do things on other machines on your network. Use it to fulfil your [JARVIS fantasies](https://en.wikipedia.org/wiki/J.A.R.V.I.S.). It's a building block skill for me that I use with [ask-remote-agent](https://github.com/nicholasf/track-tasks-skill) and [track-tasks-skill](https://github.com/nicholasf/track-tasks-skill) to plan and delegate work with other agents running on other machines.
 
-The skill supports two network providers, set via `**Provider:**` in `topology.md`:
+## How I use it
+
+It's the first slash command I run when I load Claude Code in the terminal. From there I can use it to set up other things on my network. This can include anything from making a database run on another machine, to deploying a codebase or starting an LLM for a particular agent.
+
+## Getting Started
+
+You'll need to decide how to provide information about your network. If you're just taking first steps, use the `manual` provider and enter IP addresses yourself. I use [Tailscale](https://tailscale.com/docs/how-to/quickstart)'s free offering for a VPN (they call it a 'Tailnet'), which I'd recommend for anything beyond a single extra machine.
 
 - **`tailscale`** (default) — `sync` queries Tailscale for hostnames and IPs automatically. Tailscale must be installed and running.
-- **`manual`** — you enter IP addresses in the `local-ip` column by hand. No Tailscale required. `sync` uses those values as-is rather than querying anything external.
+- **`manual`** — you enter IP addresses yourself. No Tailscale required.
 
-I use it with [track-tasks](https://github.com/nicholasf/track-tasks-skill) and [ask-foreign-agent](https://github.com/nicholasf/ask-foreign-agent-skill) to assign workloads to different LLM nodes in my home network. If you use [manage-skills](https://github.com/nicholasf/manage-skills-skill) it will help you set all of these up and autoload them whenever you start a session with your agent.
+If you're using Claude Code, just run `/load-topology` — if no topology exists yet it will guide you through setup. For any other agent, call the init script directly:
+
+```bash
+python3 scripts/init.py
+```
+
+It asks for your provider choice and, for manual mode, your machine hostnames and IPs. It writes `topology.md` and runs sync automatically. Then follow up with discover to probe each machine:
+
+```
+/load-topology discover
+```
 
 This is a home lab tool. It does not try to solve enterprise concerns like multiple SSH identities, key rotation, or multi-tenant access. It assumes you own all the machines, you have set up SSH keys, and you want your agent to know as much about your setup as you do.
 
@@ -16,14 +32,14 @@ This is a home lab tool. It does not try to solve enterprise concerns like multi
 ## Examples
 
 ```
-/load-topology discover
-```
-Probe every node: finds running models, agents, GPU/VRAM, GGUF inventory. Do this at the start of a session.
-
-```
 /load-topology
 ```
 Read the topology, show machines and models, start or swap a running model. The day-to-day entry point.
+
+```
+/load-topology discover
+```
+Probe every node: finds running models, agents, GPU/VRAM, GGUF inventory. Do this at the start of a session.
 
 ```
 /load-topology sync
@@ -44,6 +60,15 @@ Print the full topology — machines, live state, agent state, and all skill sid
 
 ## Subcommands
 
+- [`/load-topology`](#load-topology) — read topology, show machines and models, start or swap a model
+- [`/load-topology discover`](#discover) — probe every node for live state, hardware, and agents
+- [`/load-topology sync`](#sync) — refresh IPs and online status from the current provider
+- [`/load-topology benchmark <hostname> <model>`](#benchmark) — measure model throughput and record results
+- [`/load-topology show`](#show) — print full combined topology and all sidecar files
+
+---
+
+<a id="discover"></a>
 **`/load-topology discover`**
 
 Probes every machine in the topology over SSH and HTTP. For each node it collects GPU/VRAM, local IP, GGUF inventory, running inference backends (llama-server and Ollama), and configured agent endpoints (Hermes, Goose). Results are written into two sections in `topology.md`:
@@ -53,31 +78,32 @@ Probes every machine in the topology over SSH and HTTP. For each node it collect
 
 Run this at the start of a session to get an accurate picture of what is installed and running. The skill's main workflow uses these sections as the primary source for model and agent state.
 
+<a id="load-topology"></a>
 **`/load-topology`**
 
 Reads `topology.md`, presents the machines table and available models, and lets you start or swap a running model. Use it whenever you want the agent to know what is in your mesh before delegating a workload.
 
+<a id="sync"></a>
 **`/load-topology sync`**
 
-Queries Tailscale for current IPs and online status, writes `topology-backup.md` before rewriting, and updates the machines table in place. Manual columns (role, GPU, VRAM, SSH access) are preserved.
+Refreshes the machines table and writes `topology-backup.md` before making any changes. Behaviour depends on the provider set in `topology.md`: Tailscale mode queries `tailscale status` to update IPs and online status; manual mode reads the `local-ip` values you entered and validates the table. Manual columns (role, GPU, VRAM, SSH access) are preserved either way.
 
+<a id="benchmark"></a>
 **`/load-topology benchmark <hostname> <model>`**
 
 Runs `scripts/benchmark_llm.py` against a live llama-server on the named host and writes results into the `## LLM Benchmarks` table in `topology.md`.
 
+<a id="show"></a>
 **`/load-topology show`**
 
 Prints `topology.md` and every `topology-*.md` sidecar file in `$SKILLS_HOME` as a single combined view.
 
 **First-run sequence**
 
-1. Copy the [example topology format](#topology-file-format) and fill in your machines manually.
-2. Set `**Provider:**` in the metadata block:
-   - **Tailscale:** run `/load-topology sync` to pull live IPs and mark machines online or offline.
-   - **Manual:** fill in the `local-ip` column yourself, then run `/load-topology sync` to validate and timestamp the topology.
-3. Run `/load-topology discover` to populate live state, hardware details, and agent status.
-4. Start llama-server on an LLM Node (the skill will show you the startup command).
-5. Run `/load-topology benchmark <hostname> <model>` to record baseline performance.
+1. Run `/load-topology` (Claude Code) or `python3 scripts/init.py` (any other agent). Choose Tailscale or manual; for manual, enter your machine hostnames and IPs when prompted. `topology.md` is written and synced automatically.
+2. Run `/load-topology discover` to populate live state, hardware details, and agent status.
+3. Start llama-server on an LLM Node (the skill will show you the startup command).
+4. Run `/load-topology benchmark <hostname> <model>` to record baseline performance.
 
 **Conventions**
 
@@ -188,26 +214,35 @@ No mesh software required. You populate the `local-ip` column yourself. When you
 
 ## Building and syncing your topology
 
-Use `scripts/discover_tailscale.py` to list machines visible on your Tailscale mesh:
+**First time:** run the init script to create `topology.md` from scratch:
 
 ```bash
-python3 scripts/discover_tailscale.py
+python3 scripts/init.py
 ```
 
-This gives you the raw material — hostnames, IPs, online status — to fill in the machines table. Manual columns (name, role, GPU, VRAM, SSH access) are filled in by you.
+It asks for your provider choice (Tailscale or manual), collects machine entries if needed, and calls sync automatically. Pass `--provider` and `--machines` to skip the prompts:
 
-To sync an existing topology with current Tailscale data:
+```bash
+python3 scripts/init.py --provider manual --machines "pond 192.168.86.118,gollum 192.168.86.50"
+python3 scripts/init.py --provider tailscale
+```
+
+**Subsequent syncs:** refresh IPs and online status against the current provider:
 
 ```bash
 python3 scripts/sync.py
 ```
 
-This writes `topology-backup.md` in the same directory before rewriting, then rebuilds the machines table from fresh discovery data, preserving all manually-maintained columns.
-
-Or use the slash command in Claude Code:
+Or via the slash command:
 
 ```
 /load-topology sync
+```
+
+To inspect what Tailscale can see before committing it to a topology:
+
+```bash
+python3 scripts/discover_tailscale.py
 ```
 
 ## Benchmark suite

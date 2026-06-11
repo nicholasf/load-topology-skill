@@ -4,4 +4,4 @@ description: Read the local system topology to discover available machines and m
 argument-hint: "[sync | benchmark <hostname> <model>]"
 ---
 
-Reads `$TOPOLOGY_PATH` (default `$SKILLS_HOME/topology.md`) to enumerate machines and models. Run `/load-topology sync` first to create or update the topology file, then `/load-topology` for the full workflow.
+Reads `$TOPOLOGY_PATH` (default `$SKILLS_HOME/topology.md`) to enumerate machines and models. On first run, if no topology file exists, guides the user through setup automatically.
