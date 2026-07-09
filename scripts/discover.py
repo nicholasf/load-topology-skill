@@ -164,7 +164,8 @@ def probe_ollama_context_window(host: str, model: str) -> str:
         )
         with urllib.request.urlopen(req, timeout=5) as r:
             data = json.loads(r.read())
-        ctx = data.get('modelinfo', {}).get('llama.context_length')
+        mi = data.get('model_info', {})
+        ctx = next((v for k, v in mi.items() if k.endswith('.context_length')), None)
         return str(ctx) if ctx else '—'
     except Exception:
         return '—'
@@ -207,16 +208,21 @@ def discover_hardware(host: str, user: str, os_name: str) -> dict:
             "system_profiler SPDisplaysDataType 2>/dev/null"
             " | awk -F': ' '/Chipset Model/{print $2; exit}'")
     else:
+        nvidia_smi = "$(which nvidia-smi 2>/dev/null || echo /usr/lib/wsl/lib/nvidia-smi)"
         gpu = ssh_run(host, user,
-            "lspci 2>/dev/null | grep -i 'vga\\|3d controller\\|display'"
-            " | sed 's/.*: //' | head -1")
+            f"{nvidia_smi} --query-gpu=name --format=csv,noheader 2>/dev/null | head -1")
+        if not gpu:
+            gpu = ssh_run(host, user,
+                "lspci 2>/dev/null | grep -i 'vga\\|3d controller\\|display'"
+                " | sed 's/.*: //' | head -1")
     if gpu:
         out['gpu'] = gpu[:60]
 
+    nvidia_smi = "$(which nvidia-smi 2>/dev/null || echo /usr/lib/wsl/lib/nvidia-smi)"
     vram = ssh_run(host, user,
-        "nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1")
+        f"{nvidia_smi} --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1")
     if vram and vram.strip().isdigit():
-        out['vram'] = f'{int(vram.strip()) // 1024}GB GDDR6X (CUDA)'
+        out['vram'] = f'{int(vram.strip()) // 1024}GB (CUDA)'
     else:
         vram = ssh_run(host, user,
             "rocm-smi --showmeminfo vram 2>/dev/null"
