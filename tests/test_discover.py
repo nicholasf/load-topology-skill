@@ -43,12 +43,18 @@ def _mock_urlopen(response_data: dict):
 
 
 def test_probe_ollama_context_window_returns_context_length():
-    mock_resp = _mock_urlopen({'modelinfo': {'llama.context_length': 131072}})
+    mock_resp = _mock_urlopen({'model_info': {'llama.context_length': 131072}})
     with patch('urllib.request.urlopen', return_value=mock_resp):
         assert probe_ollama_context_window('gollum', 'qwen3-coder:30b') == '131072'
 
 
-def test_probe_ollama_context_window_missing_modelinfo_returns_dash():
+def test_probe_ollama_context_window_matches_any_architecture_prefix():
+    mock_resp = _mock_urlopen({'model_info': {'qwen2.context_length': 32768}})
+    with patch('urllib.request.urlopen', return_value=mock_resp):
+        assert probe_ollama_context_window('gollum', 'qwen2.5-coder:14b') == '32768'
+
+
+def test_probe_ollama_context_window_missing_model_info_returns_dash():
     mock_resp = _mock_urlopen({})
     with patch('urllib.request.urlopen', return_value=mock_resp):
         assert probe_ollama_context_window('gollum', 'qwen3-coder:30b') == '—'

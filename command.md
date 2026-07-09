@@ -201,6 +201,20 @@ fresh probe.
 
 ---
 
+## Help subcommand
+
+When the user says `/load-topology help` or "show help" or "list subcommands":
+
+1. Run:
+   ```bash
+   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/help.py"
+   ```
+
+2. Present the output as-is to the user — it lists every subcommand with a one-line
+   description.
+
+---
+
 ## Notes
 
 - The topology file is the source of truth. Always read it fresh — do not rely on cached knowledge.

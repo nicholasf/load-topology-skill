@@ -65,6 +65,7 @@ Print the full topology — machines, live state, agent state, and all skill sid
 - [`/load-topology sync`](#sync) — refresh IPs and online status from the current provider
 - [`/load-topology benchmark <hostname> <model>`](#benchmark) — measure model throughput and record results
 - [`/load-topology show`](#show) — print full combined topology and all sidecar files
+- [`/load-topology help`](#help) — list all subcommands with a one-line description
 
 ---
 
@@ -97,6 +98,11 @@ Runs `scripts/benchmark_llm.py` against a live llama-server on the named host an
 **`/load-topology show`**
 
 Prints `topology.md` and every `topology-*.md` sidecar file in `$SKILLS_HOME` as a single combined view.
+
+<a id="help"></a>
+**`/load-topology help`**
+
+Runs `scripts/help.py` and prints usage plus a one-line description for every subcommand.
 
 **First-run sequence**
 
