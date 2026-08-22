@@ -1,6 +1,6 @@
 # load-topology-skill
 
-This will let you begin having conversations with your primary agent (e.g. Claude Code) so that you can ask it to do things on other machines on your network. Use it to fulfil your [JARVIS fantasies](https://en.wikipedia.org/wiki/J.A.R.V.I.S.). It's a building block skill for me that I use with [ask-remote-agent](https://github.com/nicholasf/track-tasks-skill) and [track-tasks-skill](https://github.com/nicholasf/track-tasks-skill) to plan and delegate work with other agents running on other machines.
+This will let you begin having conversations with your primary agent (e.g. Claude Code) so that you can ask it to do things on other machines on your network. Use it to fulfil your [JARVIS fantasies](https://en.wikipedia.org/wiki/J.A.R.V.I.S.). It's a building block skill for me that I use with [ask-agent-skill](https://github.com/nicholasf/ask-agent-skill) and [track-tasks-skill](https://github.com/nicholasf/track-tasks-skill) to plan and delegate work with other agents running on other machines.
 
 ## How I use it
 
@@ -291,7 +291,7 @@ to the machines table. The convention is `topology-{skill-name}.md` in `$SKILLS_
 
 ```
 $SKILLS_HOME/topology.md                      # machines table — owned by this skill
-$SKILLS_HOME/topology-ask-foreign-agent.md    # agent endpoints — owned by that skill
+$SKILLS_HOME/topology-ask-agent.md            # agent endpoints — owned by that skill
 $SKILLS_HOME/topology-live-state.md           # example sidecar from another skill
 ```
 

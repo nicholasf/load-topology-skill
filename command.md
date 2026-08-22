@@ -62,7 +62,7 @@ Agents:
 ```
 
 Also check for any `topology-*.md` sidecar files in `$SKILLS_HOME` — these are written by
-dependent skills (e.g. ask-foreign-agent). Read and summarise any that are present.
+dependent skills (e.g. ask-agent). Read and summarise any that are present.
 
 ## Step 5 — Verify live state if needed
 
@@ -232,8 +232,7 @@ as needed — for example:
 
 | skill | section | columns added |
 |---|---|---|
-| `ask-foreign-agent-skill` | machines table | `hermes_gateway`, `hermes_key_env` |
-| `ask-remote-agent-skill` | `## Agent State` | `reasoning_buffer` |
+| `ask-agent-skill` | machines table, `## Agent State` | `hermes_gateway`, `hermes_key_env`, `reasoning_buffer` |
 
 `hermes_gateway` is the HTTP URL of the Hermes agent server on that node (e.g.
 `http://pond:8642`). `hermes_key_env` is the name of the env var in
@@ -243,7 +242,7 @@ as needed — for example:
 `reasoning_buffer` is the estimated token overhead for the model's chain-of-thought
 reasoning before it writes output (e.g. `12000` for Qwen3 with thinking enabled,
 `0` for models without extended thinking). It is set via the `topology` subcommand
-of `ask-remote-agent-skill` and preserved across `discover` runs.
+of `ask-agent-skill` and preserved across `discover` runs.
 
 Any skill can follow this pattern: add columns to `topology.md` for structural
 config, put secrets in `$SKILLS_HOME/.env` under a predictable name, and
