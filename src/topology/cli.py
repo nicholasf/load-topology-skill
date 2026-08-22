@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""topology — unified CLI for the load-topology skill."""
+"""topology — unified CLI for the topology skill."""
 
 import sys
 

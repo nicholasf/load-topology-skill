@@ -3,7 +3,7 @@ from topology.help import SUBCOMMANDS, build_help_text, main
 
 def test_build_help_text_includes_usage_line():
     text = build_help_text()
-    assert 'Usage: /load-topology [subcommand]' in text
+    assert 'Usage: /topology [subcommand]' in text
 
 
 def test_build_help_text_includes_every_subcommand_and_description():

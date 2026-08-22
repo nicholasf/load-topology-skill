@@ -2,7 +2,7 @@
 """
 discover.py — probe all reachable nodes and write live state into topology.md.
 
-Invoked via: /load-topology discover
+Invoked via: /topology discover
 
 Probes every machine in the machines table:
   - HTTP:  llama-server (:9337) and Ollama (:11434) for running models
