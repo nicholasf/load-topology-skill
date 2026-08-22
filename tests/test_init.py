@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from init import (
+from topology.init import (
     MANUAL_COLUMNS,
     TAILSCALE_COLUMNS,
     build_table,
@@ -129,8 +129,8 @@ def test_write_topology_creates_parent_dirs(tmp_path):
 
 def test_main_tailscale_non_interactive(tmp_path, monkeypatch):
     monkeypatch.setenv('SKILLS_HOME', str(tmp_path))
-    with patch('init.run_sync', return_value=True):
-        from init import main
+    with patch('topology.init.run_sync', return_value=True):
+        from topology.init import main
         import sys
         with patch.object(sys, 'argv', ['init.py', '--provider', 'tailscale']):
             main()
@@ -141,8 +141,8 @@ def test_main_tailscale_non_interactive(tmp_path, monkeypatch):
 
 def test_main_manual_non_interactive(tmp_path, monkeypatch):
     monkeypatch.setenv('SKILLS_HOME', str(tmp_path))
-    with patch('init.run_sync', return_value=True):
-        from init import main
+    with patch('topology.init.run_sync', return_value=True):
+        from topology.init import main
         import sys
         with patch.object(sys, 'argv', ['init.py', '--provider', 'manual', '--machines', 'pond 192.168.86.118']):
             main()
@@ -158,7 +158,7 @@ def test_main_exits_if_topology_exists_without_force(tmp_path, monkeypatch):
     import sys
     with patch.object(sys, 'argv', ['init.py', '--provider', 'tailscale']):
         with pytest.raises(SystemExit) as exc:
-            from init import main
+            from topology.init import main
             main()
     assert exc.value.code == 0
     assert (tmp_path / 'topology.md').read_text() == 'existing'
@@ -167,9 +167,9 @@ def test_main_exits_if_topology_exists_without_force(tmp_path, monkeypatch):
 def test_main_force_overwrites_existing(tmp_path, monkeypatch):
     monkeypatch.setenv('SKILLS_HOME', str(tmp_path))
     (tmp_path / 'topology.md').write_text('old content')
-    with patch('init.run_sync', return_value=True):
+    with patch('topology.init.run_sync', return_value=True):
         import sys
         with patch.object(sys, 'argv', ['init.py', '--provider', 'manual', '--machines', 'pond 192.168.86.118', '--force']):
-            from init import main
+            from topology.init import main
             main()
     assert 'old content' not in (tmp_path / 'topology.md').read_text()

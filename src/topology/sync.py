@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+import fnmatch
+import glob
 import os
 import shutil
 import sys
 from datetime import datetime  # used by update_last_refreshed
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from discover_tailscale import ManualProvider, TailscaleProvider
+from .discover_tailscale import ManualProvider, TailscaleProvider
 
 
 COLUMNS = ['name', 'hostname', 'tailscale-ip', 'local-ip', 'os', 'role', 'ssh', 'ssh-user', 'gpu', 'vram', 'last-verified']
@@ -15,6 +16,12 @@ MANUAL_COLUMNS = {'name', 'local-ip', 'role', 'ssh', 'ssh-user', 'gpu', 'vram', 
 def get_topology_path() -> str:
     skills_home = os.environ.get('SKILLS_HOME', os.path.expanduser('~/.agents/skills'))
     return os.path.join(skills_home, 'topology.md')
+
+
+def list_sidecars(skills_home: str) -> list[str]:
+    """Return sorted topology-*.md sidecar files, excluding backup files."""
+    candidates = glob.glob(os.path.join(skills_home, 'topology-*.md'))
+    return sorted(p for p in candidates if not fnmatch.fnmatch(os.path.basename(p), 'topology-backup*.md'))
 
 
 def backup(topology_path: str) -> None:

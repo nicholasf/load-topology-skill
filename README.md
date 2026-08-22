@@ -13,10 +13,11 @@ You'll need to decide how to provide information about your network. If you're j
 - **`tailscale`** (default) — `sync` queries Tailscale for hostnames and IPs automatically. Tailscale must be installed and running.
 - **`manual`** — you enter IP addresses yourself. No Tailscale required.
 
-If you're using Claude Code, just run `/load-topology` — if no topology exists yet it will guide you through setup. For any other agent, call the init script directly:
+If you're using Claude Code, just run `/load-topology` — if no topology exists yet it will guide you through setup. For any other agent, install the package and call the init subcommand directly:
 
 ```bash
-python3 scripts/init.py
+pip install -e .   # or: uv pip install -e .
+topology init       # or, without installing: python3 -m topology.cli init (with `src` on PYTHONPATH)
 ```
 
 It asks for your provider choice and, for manual mode, your machine hostnames and IPs. It writes `topology.md` and runs sync automatically. Then follow up with discover to probe each machine:
@@ -92,7 +93,7 @@ Refreshes the machines table and writes `topology-backup.md` before making any c
 <a id="benchmark"></a>
 **`/load-topology benchmark <hostname> <model>`**
 
-Runs `scripts/benchmark_llm.py` against a live llama-server on the named host and writes results into the `## LLM Benchmarks` table in `topology.md`.
+Runs the `benchmark` subcommand against a live llama-server on the named host and writes results into the `## LLM Benchmarks` table in `topology.md`.
 
 <a id="show"></a>
 **`/load-topology show`**
@@ -102,11 +103,11 @@ Prints `topology.md` and every `topology-*.md` sidecar file in `$SKILLS_HOME` as
 <a id="help"></a>
 **`/load-topology help`**
 
-Runs `scripts/help.py` and prints usage plus a one-line description for every subcommand.
+Runs the `help` subcommand and prints usage plus a one-line description for every subcommand.
 
 **First-run sequence**
 
-1. Run `/load-topology` (Claude Code) or `python3 scripts/init.py` (any other agent). Choose Tailscale or manual; for manual, enter your machine hostnames and IPs when prompted. `topology.md` is written and synced automatically.
+1. Run `/load-topology` (Claude Code) or `python3 -m topology.cli init` (any other agent). Choose Tailscale or manual; for manual, enter your machine hostnames and IPs when prompted. `topology.md` is written and synced automatically.
 2. Run `/load-topology discover` to populate live state, hardware details, and agent status.
 3. Start llama-server on an LLM Node (the skill will show you the startup command).
 4. Run `/load-topology benchmark <hostname> <model>` to record baseline performance.
@@ -220,23 +221,23 @@ No mesh software required. You populate the `local-ip` column yourself. When you
 
 ## Building and syncing your topology
 
-**First time:** run the init script to create `topology.md` from scratch:
+**First time:** run the init subcommand to create `topology.md` from scratch:
 
 ```bash
-python3 scripts/init.py
+python3 -m topology.cli init
 ```
 
 It asks for your provider choice (Tailscale or manual), collects machine entries if needed, and calls sync automatically. Pass `--provider` and `--machines` to skip the prompts:
 
 ```bash
-python3 scripts/init.py --provider manual --machines "pond 192.168.86.118,gollum 192.168.86.50"
-python3 scripts/init.py --provider tailscale
+python3 -m topology.cli init --provider manual --machines "pond 192.168.86.118,gollum 192.168.86.50"
+python3 -m topology.cli init --provider tailscale
 ```
 
 **Subsequent syncs:** refresh IPs and online status against the current provider:
 
 ```bash
-python3 scripts/sync.py
+python3 -m topology.cli sync
 ```
 
 Or via the slash command:
@@ -248,7 +249,7 @@ Or via the slash command:
 To inspect what Tailscale can see before committing it to a topology:
 
 ```bash
-python3 scripts/discover_tailscale.py
+python3 -m topology.discover_tailscale
 ```
 
 ## Benchmark suite

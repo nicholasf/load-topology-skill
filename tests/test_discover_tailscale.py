@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from discover_tailscale import NetworkProvider, TailscaleProvider
+from topology.discover_tailscale import NetworkProvider, TailscaleProvider
 
 
 def test_network_provider_is_abstract():

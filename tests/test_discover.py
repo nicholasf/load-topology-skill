@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from discover import (
+from topology.discover import (
     MODEL_STATE_HEADER,
     AGENT_STATE_HEADER,
     build_agent_state,
@@ -18,17 +18,17 @@ from discover import (
 # ── probe_llama_context_window ────────────────────────────────────────────────
 
 def test_probe_llama_context_window_returns_n_ctx():
-    with patch('discover.http_json', return_value={'n_ctx': 65536}):
+    with patch('topology.discover.http_json', return_value={'n_ctx': 65536}):
         assert probe_llama_context_window('pond') == '65536'
 
 
 def test_probe_llama_context_window_missing_key_returns_dash():
-    with patch('discover.http_json', return_value={'other_key': 'value'}):
+    with patch('topology.discover.http_json', return_value={'other_key': 'value'}):
         assert probe_llama_context_window('pond') == '—'
 
 
 def test_probe_llama_context_window_server_down_returns_dash():
-    with patch('discover.http_json', return_value=None):
+    with patch('topology.discover.http_json', return_value=None):
         assert probe_llama_context_window('pond') == '—'
 
 

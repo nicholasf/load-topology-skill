@@ -23,8 +23,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sync import get_topology_path
+from .sync import get_topology_path
 
 AGENT_SSH_USER = os.environ.get('AGENT_SSH_USER', 'nicholasf')
 

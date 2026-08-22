@@ -1,4 +1,4 @@
-from help import SUBCOMMANDS, build_help_text, main
+from topology.help import SUBCOMMANDS, build_help_text, main
 
 
 def test_build_help_text_includes_usage_line():

@@ -63,8 +63,7 @@ def write_topology(provider: str, table_lines: list[str], topology_path: str) ->
 
 
 def run_sync() -> bool:
-    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sync.py')
-    result = subprocess.run([sys.executable, script])
+    result = subprocess.run([sys.executable, '-m', 'topology.sync'])
     return result.returncode == 0
 
 
@@ -108,7 +107,7 @@ def prompt_machines() -> list[dict]:
     return machines
 
 
-def main():
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description='First-run setup for load-topology-skill.')
     parser.add_argument('--provider', choices=['tailscale', 'manual'], help='Network provider')
     parser.add_argument(
@@ -117,7 +116,7 @@ def main():
         help='Comma-separated hostname/ip pairs for manual mode: "pond 192.168.86.118,gollum 192.168.86.50"',
     )
     parser.add_argument('--force', action='store_true', help='Overwrite an existing topology file')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     topology_path = get_topology_path()
 
