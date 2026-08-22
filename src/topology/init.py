@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""First-run setup for load-topology-skill.
+"""First-run setup for topology-skill.
 
 Interactive mode (no args): prompts for provider choice and, for manual
 provider, machine entries.
@@ -108,7 +108,7 @@ def prompt_machines() -> list[dict]:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description='First-run setup for load-topology-skill.')
+    parser = argparse.ArgumentParser(description='First-run setup for topology-skill.')
     parser.add_argument('--provider', choices=['tailscale', 'manual'], help='Network provider')
     parser.add_argument(
         '--machines',

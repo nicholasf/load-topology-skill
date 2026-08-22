@@ -19,7 +19,7 @@ Resolve the path: `$TOPOLOGY_PATH` → `$SKILLS_HOME/topology.md` → `~/.agents
 If the file does not exist, run the init script to guide first-time setup:
 
 ```bash
-PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli init
+PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/topology-skill/src" python3 -m topology.cli init
 ```
 
 The script asks the user to choose a provider (Tailscale or manual), collects any required input, writes `topology.md`, and runs sync automatically. Once it exits successfully, continue to Step 3 with the freshly written file.
@@ -48,7 +48,7 @@ Available models:
 ```
 
 If there is no `## Model State` section, fall back to per-node model sections in the file,
-or suggest the user run `/load-topology discover` first.
+or suggest the user run `/topology discover` first.
 
 ## Step 4b — Present agent state
 
@@ -112,11 +112,11 @@ Inform the user which machine and model are active, the API endpoint (e.g. `http
 
 ## Discover subcommand
 
-When the user says `/load-topology discover` or "discover topology" or "probe nodes":
+When the user says `/topology discover` or "discover topology" or "probe nodes":
 
 1. Run:
    ```bash
-   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli discover
+   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/topology-skill/src" python3 -m topology.cli discover
    ```
 
 2. The script probes every machine in the machines table:
@@ -139,11 +139,11 @@ actually installed and running, rather than relying on a stale topology.
 
 ## Sync subcommand
 
-When the user says `/load-topology sync` or "sync topology" or "refresh topology":
+When the user says `/topology sync` or "sync topology" or "refresh topology":
 
 1. Run:
    ```bash
-   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli sync
+   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/topology-skill/src" python3 -m topology.cli sync
    ```
 2. Report a summary of changes (new machines added, IPs updated, machines marked offline).
    A single `topology-backup.md` is written before any changes.
@@ -153,7 +153,7 @@ When the user says `/load-topology sync` or "sync topology" or "refresh topology
 
 ## Benchmark subcommand
 
-When the user says `/load-topology benchmark <hostname> <model>` or "benchmark llm":
+When the user says `/topology benchmark <hostname> <model>` or "benchmark llm":
 
 1. Confirm the model is reachable:
    ```bash
@@ -163,7 +163,7 @@ When the user says `/load-topology benchmark <hostname> <model>` or "benchmark l
 
 2. Run the benchmark script:
    ```bash
-   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli benchmark \
+   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/topology-skill/src" python3 -m topology.cli benchmark \
      <hostname> <model> [--port 9337] [--runs 3]
    ```
    Default is 3 runs. The script streams a fixed prompt, measures TTFT (time to first token) and
@@ -182,11 +182,11 @@ When the user says `/load-topology benchmark <hostname> <model>` or "benchmark l
 
 ## Show subcommand
 
-When the user says `/load-topology show` or "show topology" or "show all topology files":
+When the user says `/topology show` or "show topology" or "show all topology files":
 
 1. Run:
    ```bash
-   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli show
+   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/topology-skill/src" python3 -m topology.cli show
    ```
 
 2. The script reads `topology.md` followed by every `topology-*.md` sidecar file in
@@ -203,11 +203,11 @@ fresh probe.
 
 ## Help subcommand
 
-When the user says `/load-topology help` or "show help" or "list subcommands":
+When the user says `/topology help` or "show help" or "list subcommands":
 
 1. Run:
    ```bash
-   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli help
+   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/topology-skill/src" python3 -m topology.cli help
    ```
 
 2. Present the output as-is to the user — it lists every subcommand with a one-line
@@ -225,7 +225,7 @@ When the user says `/load-topology help` or "show help" or "list subcommands":
 
 ## Topology extension convention
 
-Skills that depend on `load-topology-skill` may add columns to the topology
+Skills that depend on `topology-skill` may add columns to the topology
 table to record their own per-node configuration. The base table covers
 hostnames, IPs, SSH access, and model availability. Dependent skills extend it
 as needed — for example:

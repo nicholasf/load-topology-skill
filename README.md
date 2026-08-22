@@ -1,4 +1,4 @@
-# load-topology-skill
+# topology-skill
 
 This will let you begin having conversations with your primary agent (e.g. Claude Code) so that you can ask it to do things on other machines on your network. Use it to fulfil your [JARVIS fantasies](https://en.wikipedia.org/wiki/J.A.R.V.I.S.). It's a building block skill for me that I use with [ask-agent-skill](https://github.com/nicholasf/ask-agent-skill) and [track-tasks-skill](https://github.com/nicholasf/track-tasks-skill) to plan and delegate work with other agents running on other machines.
 
@@ -13,7 +13,7 @@ You'll need to decide how to provide information about your network. If you're j
 - **`tailscale`** (default) — `sync` queries Tailscale for hostnames and IPs automatically. Tailscale must be installed and running.
 - **`manual`** — you enter IP addresses yourself. No Tailscale required.
 
-If you're using Claude Code, just run `/load-topology` — if no topology exists yet it will guide you through setup. For any other agent, install the package and call the init subcommand directly:
+If you're using Claude Code, just run `/topology` — if no topology exists yet it will guide you through setup. For any other agent, install the package and call the init subcommand directly:
 
 ```bash
 pip install -e .   # or: uv pip install -e .
@@ -23,7 +23,7 @@ topology init       # or, without installing: python3 -m topology.cli init (with
 It asks for your provider choice and, for manual mode, your machine hostnames and IPs. It writes `topology.md` and runs sync automatically. Then follow up with discover to probe each machine:
 
 ```
-/load-topology discover
+/topology discover
 ```
 
 This is a home lab tool. It does not try to solve enterprise concerns like multiple SSH identities, key rotation, or multi-tenant access. It assumes you own all the machines, you have set up SSH keys, and you want your agent to know as much about your setup as you do.
@@ -33,27 +33,27 @@ This is a home lab tool. It does not try to solve enterprise concerns like multi
 ## Examples
 
 ```
-/load-topology
+/topology
 ```
 Read the topology, show machines and models, start or swap a running model. The day-to-day entry point.
 
 ```
-/load-topology discover
+/topology discover
 ```
 Probe every node: finds running models, agents, GPU/VRAM, GGUF inventory. Do this at the start of a session.
 
 ```
-/load-topology sync
+/topology sync
 ```
 Pull fresh Tailscale IPs and online status into `topology.md`. Run after adding a machine or when IPs change.
 
 ```
-/load-topology benchmark pond qwen3-coder-30b
+/topology benchmark pond qwen3-coder-30b
 ```
 Measure TTFT and token throughput across three runs; writes results into `topology.md`.
 
 ```
-/load-topology show
+/topology show
 ```
 Print the full topology — machines, live state, agent state, and all skill sidecars — in one view.
 
@@ -61,17 +61,17 @@ Print the full topology — machines, live state, agent state, and all skill sid
 
 ## Subcommands
 
-- [`/load-topology`](#load-topology) — read topology, show machines and models, start or swap a model
-- [`/load-topology discover`](#discover) — probe every node for live state, hardware, and agents
-- [`/load-topology sync`](#sync) — refresh IPs and online status from the current provider
-- [`/load-topology benchmark <hostname> <model>`](#benchmark) — measure model throughput and record results
-- [`/load-topology show`](#show) — print full combined topology and all sidecar files
-- [`/load-topology help`](#help) — list all subcommands with a one-line description
+- [`/topology`](#topology) — read topology, show machines and models, start or swap a model
+- [`/topology discover`](#discover) — probe every node for live state, hardware, and agents
+- [`/topology sync`](#sync) — refresh IPs and online status from the current provider
+- [`/topology benchmark <hostname> <model>`](#benchmark) — measure model throughput and record results
+- [`/topology show`](#show) — print full combined topology and all sidecar files
+- [`/topology help`](#help) — list all subcommands with a one-line description
 
 ---
 
 <a id="discover"></a>
-**`/load-topology discover`**
+**`/topology discover`**
 
 Probes every machine in the topology over SSH and HTTP. For each node it collects GPU/VRAM, local IP, GGUF inventory, running inference backends (llama-server and Ollama), and configured agent endpoints (Hermes, Goose). Results are written into two sections in `topology.md`:
 
@@ -80,37 +80,37 @@ Probes every machine in the topology over SSH and HTTP. For each node it collect
 
 Run this at the start of a session to get an accurate picture of what is installed and running. The skill's main workflow uses these sections as the primary source for model and agent state.
 
-<a id="load-topology"></a>
-**`/load-topology`**
+<a id="topology"></a>
+**`/topology`**
 
 Reads `topology.md`, presents the machines table and available models, and lets you start or swap a running model. Use it whenever you want the agent to know what is in your mesh before delegating a workload.
 
 <a id="sync"></a>
-**`/load-topology sync`**
+**`/topology sync`**
 
 Refreshes the machines table and writes `topology-backup.md` before making any changes. Behaviour depends on the provider set in `topology.md`: Tailscale mode queries `tailscale status` to update IPs and online status; manual mode reads the `local-ip` values you entered and validates the table. Manual columns (role, GPU, VRAM, SSH access) are preserved either way.
 
 <a id="benchmark"></a>
-**`/load-topology benchmark <hostname> <model>`**
+**`/topology benchmark <hostname> <model>`**
 
 Runs the `benchmark` subcommand against a live llama-server on the named host and writes results into the `## LLM Benchmarks` table in `topology.md`.
 
 <a id="show"></a>
-**`/load-topology show`**
+**`/topology show`**
 
 Prints `topology.md` and every `topology-*.md` sidecar file in `$SKILLS_HOME` as a single combined view.
 
 <a id="help"></a>
-**`/load-topology help`**
+**`/topology help`**
 
 Runs the `help` subcommand and prints usage plus a one-line description for every subcommand.
 
 **First-run sequence**
 
-1. Run `/load-topology` (Claude Code) or `python3 -m topology.cli init` (any other agent). Choose Tailscale or manual; for manual, enter your machine hostnames and IPs when prompted. `topology.md` is written and synced automatically.
-2. Run `/load-topology discover` to populate live state, hardware details, and agent status.
+1. Run `/topology` (Claude Code) or `python3 -m topology.cli init` (any other agent). Choose Tailscale or manual; for manual, enter your machine hostnames and IPs when prompted. `topology.md` is written and synced automatically.
+2. Run `/topology discover` to populate live state, hardware details, and agent status.
 3. Start llama-server on an LLM Node (the skill will show you the startup command).
-4. Run `/load-topology benchmark <hostname> <model>` to record baseline performance.
+4. Run `/topology benchmark <hostname> <model>` to record baseline performance.
 
 **Conventions**
 
@@ -145,7 +145,7 @@ Add these to your `~/.zshrc` or `~/.bashrc`.
 
 ### Secrets file
 
-Skills that depend on load-topology-skill store per-node secrets in `$SKILLS_HOME/.env`. Copy `.env.example` to `$SKILLS_HOME/.env` and fill in values as you add skills to your setup.
+Skills that depend on topology-skill store per-node secrets in `$SKILLS_HOME/.env`. Copy `.env.example` to `$SKILLS_HOME/.env` and fill in values as you add skills to your setup.
 
 The naming convention is `<NODE>_<SERVICE>_<VAR>`. For example, a Hermes bearer token for a node named `pond` is stored as `POND_HERMES_KEY`. The machines table in `topology.md` records the env var name in a skill-specific column (e.g. `hermes_key_env: POND_HERMES_KEY`) so each skill knows where to look without hardcoding node names.
 
@@ -193,7 +193,7 @@ An LLM Node is any machine that runs inference workloads. The skill assumes:
 - `llama-server` (llama.cpp) and/or Ollama are installed
 - Port `9337` for llama-server, port `11434` for Ollama
 
-Run `/load-topology discover` to auto-populate live state for all LLM Nodes. This writes two
+Run `/topology discover` to auto-populate live state for all LLM Nodes. This writes two
 sections into `topology.md`:
 
 - `## Live State` — running backends, loaded models, and GGUF inventory per node
@@ -243,7 +243,7 @@ python3 -m topology.cli sync
 Or via the slash command:
 
 ```
-/load-topology sync
+/topology sync
 ```
 
 To inspect what Tailscale can see before committing it to a topology:
@@ -295,7 +295,7 @@ $SKILLS_HOME/topology-ask-agent.md            # agent endpoints — owned by tha
 $SKILLS_HOME/topology-live-state.md           # example sidecar from another skill
 ```
 
-The load-topology skill's command reads all `topology-*.md` files alongside `topology.md`
+The topology skill's command reads all `topology-*.md` files alongside `topology.md`
 and synthesises a unified view. Each skill owns exactly one file and can rewrite it freely
 without risking interference with other skills.
 

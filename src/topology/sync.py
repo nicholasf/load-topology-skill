@@ -192,7 +192,7 @@ def main():
     else:
         print('No changes.')
     print()
-    print('Tip: run /load-topology discover for deeper per-node data — GPU model, VRAM,')
+    print('Tip: run /topology discover for deeper per-node data — GPU model, VRAM,')
     print('     local IP, installed GGUFs, running models, and agent process status.')
 
 

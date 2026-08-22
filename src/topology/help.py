@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-help.py — print usage and a summary of all load-topology subcommands.
+help.py — print usage and a summary of all topology subcommands.
 
-Invoked via: /load-topology help
+Invoked via: /topology help
 """
 
 SUMMARY = 'Read the local system topology to discover available machines and models.'
@@ -18,7 +18,7 @@ SUBCOMMANDS = [
 
 
 def build_help_text() -> str:
-    lines = [SUMMARY, '', 'Usage: /load-topology [subcommand]', '', 'Subcommands:']
+    lines = [SUMMARY, '', 'Usage: /topology [subcommand]', '', 'Subcommands:']
     width = max(len(usage) for usage, _ in SUBCOMMANDS)
     for usage, description in SUBCOMMANDS:
         lines.append(f'  {usage.ljust(width)}  {description}')
