@@ -3,7 +3,7 @@ import tempfile
 
 import pytest
 
-from benchmark_llm import (
+from topology.benchmark_llm import (
     BENCH_COLUMNS,
     build_benchmark_table,
     parse_benchmark_table,

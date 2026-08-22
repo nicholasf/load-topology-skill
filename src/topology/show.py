@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """show.py — print a combined view of topology.md and all sidecar files."""
 
-import glob
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sync import get_topology_path
+from .sync import get_topology_path, list_sidecars
 
 
 def main() -> None:
@@ -17,7 +15,7 @@ def main() -> None:
         print(f'Topology not found: {topology_path}', file=sys.stderr)
         sys.exit(1)
 
-    sidecars = sorted(glob.glob(os.path.join(skills_home, 'topology-*.md')))
+    sidecars = list_sidecars(skills_home)
     files = [topology_path] + sidecars
 
     for i, path in enumerate(files):

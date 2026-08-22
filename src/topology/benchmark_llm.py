@@ -164,13 +164,13 @@ def record_result(
     print(f"Recorded in {topology_path}")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Benchmark an LLM node via OpenAI-compat API")
     parser.add_argument('hostname', help="target machine hostname or IP")
     parser.add_argument('model', help="model name as reported by the server")
     parser.add_argument('--port', type=int, default=9337)
     parser.add_argument('--runs', type=int, default=3)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     print(f"Benchmarking {args.model} on {args.hostname}:{args.port} ({args.runs} runs)")
     print(f"Prompt: {BENCHMARK_PROMPT!r}\n")

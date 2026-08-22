@@ -3,8 +3,8 @@ import shutil
 
 import pytest
 
-from discover_tailscale import ManualProvider
-from sync import build_table, merge, parse_table, read_provider, update_last_refreshed
+from topology.discover_tailscale import ManualProvider
+from topology.sync import build_table, merge, parse_table, read_provider, update_last_refreshed
 
 
 POND_LOCAL_IP = '192.168.86.118'
@@ -120,7 +120,7 @@ def test_sync_manual_topology_roundtrip(tmp_path, monkeypatch):
     topology_path.write_text(FIXTURE_TOPOLOGY)
 
     # Import sync functions after monkeypatching env
-    from sync import backup, get_topology_path, main
+    from topology.sync import backup, get_topology_path, main
 
     # Confirm path resolution picks up our temp dir
     assert get_topology_path() == str(topology_path)

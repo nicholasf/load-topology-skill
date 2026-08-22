@@ -19,7 +19,7 @@ Resolve the path: `$TOPOLOGY_PATH` → `$SKILLS_HOME/topology.md` → `~/.agents
 If the file does not exist, run the init script to guide first-time setup:
 
 ```bash
-python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/init.py"
+PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli init
 ```
 
 The script asks the user to choose a provider (Tailscale or manual), collects any required input, writes `topology.md`, and runs sync automatically. Once it exits successfully, continue to Step 3 with the freshly written file.
@@ -62,7 +62,7 @@ Agents:
 ```
 
 Also check for any `topology-*.md` sidecar files in `$SKILLS_HOME` — these are written by
-dependent skills (e.g. ask-foreign-agent). Read and summarise any that are present.
+dependent skills (e.g. ask-agent). Read and summarise any that are present.
 
 ## Step 5 — Verify live state if needed
 
@@ -116,7 +116,7 @@ When the user says `/load-topology discover` or "discover topology" or "probe no
 
 1. Run:
    ```bash
-   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/discover.py"
+   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli discover
    ```
 
 2. The script probes every machine in the machines table:
@@ -143,7 +143,7 @@ When the user says `/load-topology sync` or "sync topology" or "refresh topology
 
 1. Run:
    ```bash
-   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/sync.py"
+   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli sync
    ```
 2. Report a summary of changes (new machines added, IPs updated, machines marked offline).
    A single `topology-backup.md` is written before any changes.
@@ -163,7 +163,7 @@ When the user says `/load-topology benchmark <hostname> <model>` or "benchmark l
 
 2. Run the benchmark script:
    ```bash
-   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/benchmark_llm.py" \
+   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli benchmark \
      <hostname> <model> [--port 9337] [--runs 3]
    ```
    Default is 3 runs. The script streams a fixed prompt, measures TTFT (time to first token) and
@@ -186,7 +186,7 @@ When the user says `/load-topology show` or "show topology" or "show all topolog
 
 1. Run:
    ```bash
-   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/show.py"
+   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli show
    ```
 
 2. The script reads `topology.md` followed by every `topology-*.md` sidecar file in
@@ -207,7 +207,7 @@ When the user says `/load-topology help` or "show help" or "list subcommands":
 
 1. Run:
    ```bash
-   python3 "${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/scripts/help.py"
+   PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/load-topology-skill/src" python3 -m topology.cli help
    ```
 
 2. Present the output as-is to the user — it lists every subcommand with a one-line
@@ -232,8 +232,7 @@ as needed — for example:
 
 | skill | section | columns added |
 |---|---|---|
-| `ask-foreign-agent-skill` | machines table | `hermes_gateway`, `hermes_key_env` |
-| `ask-remote-agent-skill` | `## Agent State` | `reasoning_buffer` |
+| `ask-agent-skill` | machines table, `## Agent State` | `hermes_gateway`, `hermes_key_env`, `reasoning_buffer` |
 
 `hermes_gateway` is the HTTP URL of the Hermes agent server on that node (e.g.
 `http://pond:8642`). `hermes_key_env` is the name of the env var in
@@ -243,7 +242,7 @@ as needed — for example:
 `reasoning_buffer` is the estimated token overhead for the model's chain-of-thought
 reasoning before it writes output (e.g. `12000` for Qwen3 with thinking enabled,
 `0` for models without extended thinking). It is set via the `topology` subcommand
-of `ask-remote-agent-skill` and preserved across `discover` runs.
+of `ask-agent-skill` and preserved across `discover` runs.
 
 Any skill can follow this pattern: add columns to `topology.md` for structural
 config, put secrets in `$SKILLS_HOME/.env` under a predictable name, and

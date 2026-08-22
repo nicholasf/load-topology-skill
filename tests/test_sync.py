@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from sync import (
+from topology.sync import (
     COLUMNS,
     build_table,
     get_topology_path,
