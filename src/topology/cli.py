@@ -3,7 +3,7 @@
 
 import sys
 
-from . import benchmark_llm, discover, help as help_module, init, show, sync
+from . import benchmark_llm, discover, help as help_module, init, playbook, show, sync
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -20,6 +20,8 @@ def main(argv: list[str] | None = None) -> None:
         'sync': lambda: sync.main(),
         'benchmark': lambda: benchmark_llm.main(rest),
         'show': lambda: show.main(),
+        'run': lambda: playbook.main(rest),
+        'playbook': lambda: playbook.playbook_main(rest),
     }
 
     if command not in dispatch:

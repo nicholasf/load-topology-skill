@@ -1,32 +1,120 @@
 # topology-skill
 
-This will let you begin having conversations with your primary agent (e.g. Claude Code) so that you can ask it to do things on other machines on your network. Use it to fulfil your [JARVIS fantasies](https://en.wikipedia.org/wiki/J.A.R.V.I.S.). It's a building block skill for me that I use with [ask-agent-skill](https://github.com/nicholasf/ask-agent-skill) and [track-tasks-skill](https://github.com/nicholasf/track-tasks-skill) to plan and delegate work with other agents running on other machines.
+Under development.
+
+Topology lets you record commands as an ordered list of *tasks* — much like a pipeline file — grouped into a named *playbook* and triggered by a natural language phrase: "clean up docker" or "wake pond up". A phrase might resolve to a playbook with one task or a dozen; that's the author's choice, not a rule the tool enforces. Playbooks work standalone on your own machine (`localhost`) with no setup at all. They also extend across every other machine you own once you build a *topology* — a markdown picture of the *nodes* (machines) an agent can reach, by name, either via ssh or on localhost. You can write other skills that build sidecar topology documents, for e.g. [ask-agent-skill](https://github.com/nicholasf/ask-agent-skill), [track-tasks-skill](https://github.com/nicholasf/track-tasks-skill).
+
+This obviously carries security issues about trusting agents on your network and recording sensitive data and application structures in markdown and TOML. All files are prefixed with `topology-` for inclusion in ignore files and patterns. They are about as sensitive as any devops configuration file, so treat them as such.
 
 ## How I use it
 
-It's the first slash command I run when I load Claude Code in the terminal. From there I can use it to set up other things on my network. This can include anything from making a database run on another machine, to deploying a codebase or starting an LLM for a particular agent.
+`/topology load` is the first slash command I run when I load an LLM harness in the terminal. From there I can use it to set up other things on my network, usually other agents and LLMs - sometimes on localhost, sometimes on other nodes. 
+
+This can include anything from making a database run on another machine, to deploying a codebase or starting an LLM for a particular agent.
 
 ## Getting Started
 
-You'll need to decide how to provide information about your network. If you're just taking first steps, use the `manual` provider and enter IP addresses yourself. I use [Tailscale](https://tailscale.com/docs/how-to/quickstart)'s free offering for a VPN (they call it a 'Tailnet'), which I'd recommend for anything beyond a single extra machine.
+The fastest way in is a playbook for your own machine — no topology, no provider, nothing to
+discover. Everything past that (reaching other machines, by name) builds on the same idea.
+
+Install the package once:
+
+```bash
+pip install -e .   # or: uv pip install -e .
+# or, without installing: PYTHONPATH pointed at `src`, e.g. python3 -m topology.cli playbook list
+```
+
+### 1. Write a playbook
+
+Playbooks that target `localhost` need no topology at all — `hosts = "localhost"` always means
+"the machine running this command," nothing to set up first. Create
+`topology-playbook-localhost.toml` in `$SKILLS_HOME` (default `~/.agents/skills`):
+
+```toml
+[[playbook]]
+name = "clean-docker"
+aliases = ["clean up docker", "prune docker"]
+description = "Removes stopped containers, dangling images, and unused volumes."
+
+  [[playbook.tasks]]
+  name = "prune"
+  hosts = "localhost"
+  command = "docker system prune -f"
+  oversight = true
+```
+
+### 2. Find it, then run it
+
+```
+/topology playbook list
+```
+```
+clean-docker
+  Removes stopped containers, dangling images, and unused volumes.
+  aliases: clean up docker, prune docker
+  source: topology-playbook-localhost.toml
+```
+
+```
+/topology run "clean up docker"
+```
+
+Prints the plan, then pauses for confirmation — this task is marked `oversight = true` because
+it's destructive. Same phrase works in any future session, on any model: the command doesn't
+need to be re-derived from memory or prose again.
+
+That's the whole loop, and it needs nothing but your own machine. See [Playbooks](#playbooks)
+for the full format — composing playbooks together, and oversight gating in more depth.
+Everything below extends the same `hosts` field and the same playbook format across every other
+machine you own.
+
+## Reaching other machines
+
+You'll need to decide how to provide information about your network. If you're just taking
+first steps, use the `manual` provider and enter IP addresses yourself. I use
+[Tailscale](https://tailscale.com/docs/how-to/quickstart)'s free offering for a VPN (they call
+it a 'Tailnet'), which I'd recommend for anything beyond a single extra machine.
 
 - **`tailscale`** (default) — `sync` queries Tailscale for hostnames and IPs automatically. Tailscale must be installed and running.
 - **`manual`** — you enter IP addresses yourself. No Tailscale required.
 
-If you're using Claude Code, just run `/topology` — if no topology exists yet it will guide you through setup. For any other agent, install the package and call the init subcommand directly:
+If you're using Claude Code, just run `/topology` — if no topology exists yet it will guide you through setup. For any other agent, call the init subcommand directly:
 
 ```bash
-pip install -e .   # or: uv pip install -e .
-topology init       # or, without installing: python3 -m topology.cli init (with `src` on PYTHONPATH)
+topology init       # or: python3 -m topology.cli init
 ```
 
-It asks for your provider choice and, for manual mode, your machine hostnames and IPs. It writes `topology.md` and runs sync automatically. Then follow up with discover to probe each machine:
+It asks for your provider choice and, for manual mode, your machine hostnames and IPs. It writes `topology.md` and runs sync automatically.
+
+This is a home lab tool. It does not try to solve enterprise concerns like multiple SSH identities, key rotation, or multi-tenant access. It assumes you own all the machines, you have set up SSH keys, and you want your agent to know as much about your setup as you do.
+
+### Identify a node
 
 ```
 /topology discover
 ```
 
-This is a home lab tool. It does not try to solve enterprise concerns like multiple SSH identities, key rotation, or multi-tenant access. It assumes you own all the machines, you have set up SSH keys, and you want your agent to know as much about your setup as you do.
+Probes every machine over SSH and HTTP — GPU/VRAM, GGUF inventory, running inference backends, agent endpoints — and writes it into `topology.md`. Run `/topology` afterward to see the machines table and what's running where. Say your topology has a machine named `pond` with an RTX 4090 and no model currently running — that's the node the rest of this section acts on.
+
+### Record a playbook that targets it
+
+Same loop as the localhost example, just pointed at a real host instead:
+
+```toml
+[[playbook]]
+name = "start-pond-qwen"
+aliases = ["start pond's qwen model", "wake pond up"]
+description = "Starts llama-server on pond with qwen3-coder-30b loaded."
+
+  [[playbook.tasks]]
+  name = "start llama-server"
+  hosts = "pond"
+  command = '''
+  ~/.local/bin/llama-server -m ~/.local/share/gguf/qwen3-coder-30b.gguf --port 9337 &
+  '''
+```
+
+`hosts = "pond"` is resolved against the machines table, not hardcoded as an IP. `/topology playbook list` and `/topology run "wake pond up"` work exactly as they did for the `localhost` example — same commands, same mental model, just reaching a different machine.
 
 ---
 
@@ -57,6 +145,16 @@ Measure TTFT and token throughput across three runs; writes results into `topolo
 ```
 Print the full topology — machines, live state, agent state, and all skill sidecars — in one view.
 
+```
+/topology run "wake pond up"
+```
+Resolve a trigger phrase to a playbook, print the full plan, and run it — tasks marked for oversight pause for individual confirmation.
+
+```
+/topology playbook list
+```
+List every playbook — name, description, aliases, source file — across every `topology-playbook*.toml` file.
+
 ---
 
 ## Subcommands
@@ -66,6 +164,8 @@ Print the full topology — machines, live state, agent state, and all skill sid
 - [`/topology sync`](#sync) — refresh IPs and online status from the current provider
 - [`/topology benchmark <hostname> <model>`](#benchmark) — measure model throughput and record results
 - [`/topology show`](#show) — print full combined topology and all sidecar files
+- [`/topology run "<phrase>"`](#run) — resolve a trigger phrase to a playbook and run it
+- [`/topology playbook list`](#playbook-list) — list every playbook: name, description, aliases, source file
 - [`/topology help`](#help) — list all subcommands with a one-line description
 
 ---
@@ -99,6 +199,16 @@ Runs the `benchmark` subcommand against a live llama-server on the named host an
 **`/topology show`**
 
 Prints `topology.md` and every `topology-*.md` sidecar file in `$SKILLS_HOME` as a single combined view.
+
+<a id="run"></a>
+**`/topology run "<phrase>"`**
+
+Resolves the phrase against every playbook's aliases (see [Playbooks](#playbooks)), prints the full flattened plan, then runs each task in order, stopping at the first failure. Add `--skip-oversight` to run without pausing for individual task confirmation — the plan still always prints first.
+
+<a id="playbook-list"></a>
+**`/topology playbook list`**
+
+Lists every playbook found across `topology-playbook*.toml` — name, description, aliases, and which file it came from — sorted by name.
 
 <a id="help"></a>
 **`/topology help`**
@@ -299,17 +409,112 @@ The topology skill's command reads all `topology-*.md` files alongside `topology
 and synthesises a unified view. Each skill owns exactly one file and can rewrite it freely
 without risking interference with other skills.
 
+## Playbooks
+
+A playbook is a named, alias-tagged sequence of commands run against one or more nodes —
+recorded once so a phrase resolves to it deterministically later, instead of being re-derived
+from prose every session.
+
+Playbooks live in TOML files in `$SKILLS_HOME`, matched by one glob: `topology-playbook*.toml`.
+
+- `topology-playbook-<node>.toml` — every task in the playbook targets one host (e.g.
+  `topology-playbook-pond.toml`), where `<node>` matches a `name` in the machines table.
+- `topology-playbooks.toml` — the shared file, for playbooks whose tasks span more than one
+  host. A cross-node playbook is built by *composing* single-node playbooks (see below), not
+  by writing one alias that implicitly means different things depending on which node it
+  touches — resolving which node(s) an action affects is never inferred at run time.
+
+A file can hold more than one playbook, using TOML's array-of-tables:
+
+```toml
+[[playbook]]
+name = "start-pond-qwen"
+aliases = ["start pond's qwen model", "wake pond up"]
+description = "Starts llama-server on pond with qwen3.8 loaded."
+
+  [[playbook.tasks]]
+  name = "start llama-server"
+  hosts = "pond"
+  command = '''
+  ~/.local/bin/llama-server -m ~/.local/share/gguf/qwen3-coder-30b.gguf --port 9337 &
+  '''
+
+  [[playbook.tasks]]
+  name = "health check"
+  hosts = "pond"
+  command = "curl -s http://pond:9337/health"
+  oversight = false
+```
+
+**Tasks** are deliberately simple — a host and a literal command, nothing more; no
+conditionals, loops, or templating. A task is either:
+
+- a **command task** — `hosts` is a `name` from the machines table (resolved to `hostname`/
+  `ssh-user` and run over SSH) or the reserved `localhost`, which runs as a local subprocess
+  with no SSH and no table lookup — plus `command`, the literal shell command. Use a TOML
+  literal string (`'''...'''`) for multi-line commands so the shell text round-trips verbatim,
+  backslashes included.
+- a **playbook task** — `ref` names another playbook, expanded in place. This is how a
+  cross-node playbook is built: define the same intent once per relevant node (e.g.
+  `restart-model-server` in both `topology-playbook-pond.toml` and
+  `topology-playbook-gollum.toml`, each with node-appropriate commands), then a playbook in
+  the shared file composes them via `ref`. A playbook that references itself, directly or
+  transitively, is rejected instead of looping.
+
+**Oversight.** Any task can require an individual Y/N confirmation before it runs — set with
+`oversight = true`/`false`, or left unset, in which case a keyword heuristic (`restart`,
+`kill`, `stop`, `rm`, `drop`, `wipe`) flags a match. An explicit value always wins over the
+heuristic, in either direction. The full flattened plan — every task, its host, and whether it
+requires oversight — always prints before anything runs, whether or not any individual task is
+gated.
+
+**Running a playbook:**
+
+```
+/topology run "wake pond up"
+```
+
+Matches the phrase against every playbook's `aliases` (exact/normalized string match — no
+model involved in resolution or execution), prints the flattened plan, then executes each task
+in order, stopping on the first non-zero exit. Add `--skip-oversight` to run without pausing
+for individual task confirmation — the plan still always prints first. No match prints the
+closest alias candidates instead of guessing:
+
+```
+$ /topology run "do something unrelated"
+No playbook matches "do something unrelated".
+Did you mean:
+  - wake pond up
+  - start pond's qwen model
+```
+
+Alias uniqueness is enforced globally across every `topology-playbook*.toml` file — a
+duplicate alias anywhere is a parse-time error naming both playbooks. Avoiding a collision in
+the first place is on the author; the tool only detects one.
+
+**Finding a playbook again:**
+
+```
+/topology playbook list
+```
+
+Prints every playbook — name, description, aliases, source file — sorted by name, so you don't have to remember an exact phrase or which file it lives in.
+
 ## Privacy
 
 `topology.md` and its archives must not be committed to version control. The file contains
 hostnames, IP addresses, and SSH usernames. Treat it like Terraform state — it can be
 regenerated, and it is nobody else's business.
 
-These patterns cover the main file, sidecars, and the backup:
+Playbooks (`topology-playbook*.toml`) are at least as sensitive and follow the same rule: they
+reveal what's running on a node and how to control it, not just network details.
+
+One pattern covers the main file and everything this project ever writes alongside it —
+sidecars, the backup, and playbooks, regardless of extension:
 
 ```
 topology.md
-topology-*.md
+topology-*
 ```
 
 If your topology lives in a git repository, verify these patterns are present.
