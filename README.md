@@ -2,7 +2,25 @@
 
 Under development.
 
-Topology lets you record commands as an ordered list of *tasks* — much like a pipeline file — grouped into a named *playbook* and triggered by a natural language phrase: "clean up docker" or "wake pond up". A phrase might resolve to a playbook with one task or a dozen; that's the author's choice, not a rule the tool enforces. Playbooks work standalone on your own machine (`localhost`) with no setup at all. They also extend across every other machine you own once you build a *topology* — a markdown picture of the *nodes* (machines) an agent can reach, by name, either via ssh or on localhost. You can write other skills that build sidecar topology documents, for e.g. [ask-agent-skill](https://github.com/nicholasf/ask-agent-skill), [track-tasks-skill](https://github.com/nicholasf/track-tasks-skill).
+
+Topology lets you do things with machines on your network. It could just be your localhost. I wrote it because I run LLMs on two machines in my house. Since then it's usage has widened a little.
+
+... finish this later - get the prototype working.
+
+
+Steps:
+
+1. Map a topology
+   1. localhost
+   2. tailscale
+   3. manual
+2. View your topology
+3. Run a command
+4. Record a command in a node playbook (localhost, remote machine)
+
+
+
+You can record commands as an ordered list of *tasks* — much like a pipeline file — grouped into a named *playbook* and triggered by a natural language phrase: "clean up docker" or "wake pond up". A phrase might resolve to a playbook with one task or a dozen; that's the author's choice, not a rule the tool enforces. Playbooks work standalone on your own machine (`localhost`) with no setup at all. They also extend across every other machine you own once you build a *topology* — a markdown picture of the *nodes* (machines) an agent can reach, by name, either via ssh or on localhost. You can write other skills that build sidecar topology documents, for e.g. [ask-agent-skill](https://github.com/nicholasf/ask-agent-skill), [track-tasks-skill](https://github.com/nicholasf/track-tasks-skill).
 
 This obviously carries security issues about trusting agents on your network and recording sensitive data and application structures in markdown and TOML. All files are prefixed with `topology-` for inclusion in ignore files and patterns. They are about as sensitive as any devops configuration file, so treat them as such.
 
