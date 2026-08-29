@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-discover.py — probe all reachable nodes and write live state into topology.md.
+discover.py — probe all reachable nodes and write live state into topology.toml.
 
 Invoked via: /topology discover
 
 Probes every machine in the machines table:
   - HTTP:  llama-server (:9337) and Ollama (:11434) for running models
-  - SSH:   gpu, vram, local-ip, GGUF inventory
-  - HTTP:  configured agent endpoints (hermes_gateway, goose_acp_url columns)
+  - SSH:   gpu, vram, local_ip, GGUF inventory
+  - HTTP:  configured agent endpoints (hermes_gateway, goose_acp_url keys)
   - SSH:   pgrep scan for known agent processes
 
-Writes/replaces two sections in topology.md:
-  ## Model State  — inference backend status, models, and context windows per node
-  ## Agent State  — per-node agent liveness and reasoning_buffer
+Writes/replaces two arrays in topology.toml:
+  model_state  — inference backend status, models, and context windows per node
+  agent_state  — per-node agent liveness and reasoning_buffer
 """
 
 import json
@@ -24,14 +24,9 @@ import urllib.request
 from datetime import datetime
 
 from .sync import get_topology_path
+from .toml_io import read_toml, write_toml
 
 AGENT_SSH_USER = os.environ.get('AGENT_SSH_USER', 'nicholasf')
-
-MODEL_STATE_HEADER = '## Model State'
-AGENT_STATE_HEADER = '## Agent State'
-
-MODEL_COLS = ['hostname', 'backend', 'port', 'models', 'context_window', 'status', 'last-seen']
-AGENT_COLS = ['hostname', 'agent', 'endpoint', 'status', 'process', 'last-seen', 'reasoning_buffer']
 
 KNOWN_AGENT_PROCS = ['hermes', 'goose', 'aider', 'open-webui']
 
@@ -77,82 +72,18 @@ def http_up(url: str, timeout: int = 3) -> bool:
         return False
 
 
-# ── Table parsing (full — preserves all columns) ──────────────────────────────
-
-def parse_full_table(lines: list[str]) -> tuple[int, int, list[str], list[dict]]:
-    start = -1
-    for i, line in enumerate(lines):
-        if line.strip().startswith('|') and '| name |' in line:
-            start = i
-            break
-    if start == -1:
-        return -1, -1, [], []
-
-    cols = [p.strip() for p in lines[start].split('|')[1:-1]]
-
-    end = len(lines)
-    for i in range(start + 1, len(lines)):
-        s = lines[i].strip()
-        if not s or (s.startswith('-') and not s.startswith('|-')):
-            end = i
-            break
-
-    rows = []
-    for line in lines[start + 2:end]:
-        if not line.strip() or not line.startswith('|'):
-            continue
-        parts = [p.strip() for p in line.split('|')[1:-1]]
-        while len(parts) < len(cols):
-            parts.append('—')
-        rows.append(dict(zip(cols, parts[:len(cols)])))
-
-    return start, end, cols, rows
-
-
-def build_full_table(cols: list[str], rows: list[dict]) -> list[str]:
-    header = '| ' + ' | '.join(cols) + ' |'
-    sep = '|' + '|'.join('---' for _ in cols) + '|'
-    out = [header, sep]
-    for row in rows:
-        out.append('| ' + ' | '.join(row.get(c, '—') for c in cols) + ' |')
-    return out
-
-
-# ── Section helpers ───────────────────────────────────────────────────────────
-
-def find_section(lines: list[str], header: str) -> tuple[int, int]:
-    start = -1
-    for i, line in enumerate(lines):
-        if line.strip() == header:
-            start = i
-            break
-    if start == -1:
-        return -1, -1
-    for i in range(start + 1, len(lines)):
-        if lines[i].startswith('## ') and lines[i].strip() != header:
-            return start, i
-    return start, len(lines)
-
-
-def replace_or_append(lines: list[str], header: str, content: list[str]) -> list[str]:
-    start, end = find_section(lines, header)
-    if start == -1:
-        return lines + [''] + content
-    return lines[:start] + content + lines[end:]
-
-
 # ── Context window probing ────────────────────────────────────────────────────
 
-def probe_llama_context_window(host: str) -> str:
-    """GET /props from llama-server; returns n_ctx as string or '—'."""
+def probe_llama_context_window(host: str) -> int | None:
+    """GET /props from llama-server; returns n_ctx or None."""
     data = http_json(f'http://{host}:9337/props')
     if data and 'n_ctx' in data:
-        return str(data['n_ctx'])
-    return '—'
+        return data['n_ctx']
+    return None
 
 
-def probe_ollama_context_window(host: str, model: str) -> str:
-    """POST /api/show to Ollama for a specific model; returns context length or '—'."""
+def probe_ollama_context_window(host: str, model: str) -> int | None:
+    """POST /api/show to Ollama for a specific model; returns context length or None."""
     try:
         body = json.dumps({'name': model}).encode()
         req = urllib.request.Request(
@@ -165,32 +96,20 @@ def probe_ollama_context_window(host: str, model: str) -> str:
             data = json.loads(r.read())
         mi = data.get('model_info', {})
         ctx = next((v for k, v in mi.items() if k.endswith('.context_length')), None)
-        return str(ctx) if ctx else '—'
+        return int(ctx) if ctx else None
     except Exception:
-        return '—'
+        return None
 
 
 # ── Preserved reasoning_buffer values ────────────────────────────────────────
 
-def read_existing_agent_reasoning_buffers(lines: list[str]) -> dict[tuple[str, str], str]:
-    """Read existing reasoning_buffer values from Agent State before overwriting."""
-    start, end = find_section(lines, AGENT_STATE_HEADER)
-    if start == -1:
-        return {}
-    result: dict[tuple[str, str], str] = {}
-    headers: list[str] | None = None
-    for line in lines[start:end]:
-        if line.startswith('| hostname'):
-            headers = [h.strip() for h in line.split('|')[1:-1]]
-        elif headers and line.startswith('|') and '---' not in line:
-            values = [v.strip() for v in line.split('|')[1:-1]]
-            row = dict(zip(headers, values))
-            host = row.get('hostname', '—')
-            agent = row.get('agent', '—')
-            buf = row.get('reasoning_buffer', '—')
-            if host != '—' and agent != '—':
-                result[(host, agent)] = buf
-    return result
+def read_existing_agent_reasoning_buffers(agent_state: list[dict]) -> dict[tuple[str, str], int]:
+    """Read existing reasoning_buffer values from agent_state before overwriting."""
+    return {
+        (row['hostname'], row['agent']): row['reasoning_buffer']
+        for row in agent_state
+        if row.get('hostname') and row.get('agent') and row.get('reasoning_buffer') is not None
+    }
 
 
 # ── Discovery ─────────────────────────────────────────────────────────────────
@@ -200,7 +119,7 @@ def discover_hardware(host: str, user: str, os_name: str) -> dict:
 
     ip = ssh_run(host, user, "ip route get 1 2>/dev/null | awk '{print $7; exit}'")
     if ip:
-        out['local-ip'] = ip
+        out['local_ip'] = ip
 
     if 'macos' in os_name.lower():
         gpu = ssh_run(host, user,
@@ -230,7 +149,7 @@ def discover_hardware(host: str, user: str, os_name: str) -> dict:
             gb = int(vram.strip()) // (1024 ** 3)
             out['vram'] = f'{gb}GB UMA (ROCm)'
 
-    out['last-verified'] = ts()[:10]
+    out['last_verified'] = ts()[:10]
     return out
 
 
@@ -248,23 +167,15 @@ def probe_models(host: str) -> dict:
 
     ls_up = bool(ls_data and 'data' in ls_data)
     ls_models = [m['id'] for m in ls_data.get('data', [])] if ls_data else []
-    ls_ctx = probe_llama_context_window(host) if ls_up else '—'
+    ls_ctx = probe_llama_context_window(host) if ls_up else None
 
     ol_up = bool(ol_data and 'data' in ol_data)
     ol_models = [m['id'] for m in ol_data.get('data', [])] if ol_data else []
-    ol_ctx = probe_ollama_context_window(host, ol_models[0]) if (ol_up and ol_models) else '—'
+    ol_ctx = probe_ollama_context_window(host, ol_models[0]) if (ol_up and ol_models) else None
 
     return {
-        'llama_server': {
-            'up': ls_up,
-            'models': ls_models,
-            'context_window': ls_ctx,
-        },
-        'ollama': {
-            'up': ol_up,
-            'models': ol_models,
-            'context_window': ol_ctx,
-        },
+        'llama_server': {'up': ls_up, 'models': ls_models, 'context_window': ls_ctx},
+        'ollama': {'up': ol_up, 'models': ol_models, 'context_window': ol_ctx},
     }
 
 
@@ -272,21 +183,23 @@ def probe_agents(host: str, user: str | None, row: dict) -> list[dict]:
     now = ts()
     results = []
 
-    for agent_name, col in [('hermes', 'hermes_gateway'), ('goose', 'goose_acp_url')]:
-        endpoint = row.get(col, '—')
-        if not endpoint or endpoint == '—':
+    for agent_name, key in [('hermes', 'hermes_gateway'), ('goose', 'goose_acp_url')]:
+        endpoint = row.get(key)
+        if not endpoint:
             continue
         probe_url = endpoint.replace('ws://', 'http://').replace('wss://', 'https://')
         up = http_up(probe_url)
         proc = ssh_run(host, user, f"pgrep -x {agent_name} 2>/dev/null | head -1") if user else None
-        results.append({
+        entry = {
             'hostname': host,
             'agent': agent_name,
             'endpoint': endpoint,
             'status': 'up' if up else 'down',
             'process': ('running' if proc else 'not found') if user else '(no SSH)',
-            'last-seen': now if up else '—',
-        })
+        }
+        if up:
+            entry['last_seen'] = now
+        results.append(entry)
 
     if user:
         covered = {r['agent'] for r in results}
@@ -301,7 +214,7 @@ def probe_agents(host: str, user: str | None, row: dict) -> list[dict]:
                     'endpoint': '(not configured)',
                     'status': 'process up',
                     'process': 'running',
-                    'last-seen': now,
+                    'last_seen': now,
                 })
 
     return results
@@ -309,63 +222,52 @@ def probe_agents(host: str, user: str | None, row: dict) -> list[dict]:
 
 # ── Section builders ──────────────────────────────────────────────────────────
 
-def build_model_state(discoveries: dict) -> list[str]:
-    lines = [MODEL_STATE_HEADER, f'*Last updated: {ts()}*', '']
-    h = '| ' + ' | '.join(MODEL_COLS) + ' |'
-    sep = '|' + '|'.join('---' for _ in MODEL_COLS) + '|'
-    lines += [h, sep]
+def build_model_state(discoveries: dict) -> list[dict]:
+    rows = []
+    now = ts()
 
     for host in sorted(discoveries):
         d = discoveries[host]
         models = d.get('models', {})
-        now = ts()
 
         ls = models.get('llama_server', {})
-        model_str = ', '.join(ls.get('models', [])) if ls.get('up') else '—'
-        ctx = ls.get('context_window', '—')
-        lines.append(
-            f'| {host} | llama-server | 9337 | {model_str} | {ctx}'
-            f' | {"up" if ls.get("up") else "down"}'
-            f' | {now if ls.get("up") else "—"} |'
-        )
+        row = {'hostname': host, 'backend': 'llama-server', 'port': 9337,
+               'models': ls.get('models', []) if ls.get('up') else [],
+               'status': 'up' if ls.get('up') else 'down'}
+        if ls.get('up'):
+            row['last_seen'] = now
+            if ls.get('context_window') is not None:
+                row['context_window'] = ls['context_window']
+        rows.append(row)
 
         ol = models.get('ollama', {})
-        model_str = ', '.join(ol.get('models', [])) if ol.get('up') else '—'
-        ctx = ol.get('context_window', '—')
-        lines.append(
-            f'| {host} | ollama | 11434 | {model_str} | {ctx}'
-            f' | {"up" if ol.get("up") else "down"}'
-            f' | {now if ol.get("up") else "—"} |'
-        )
+        row = {'hostname': host, 'backend': 'ollama', 'port': 11434,
+               'models': ol.get('models', []) if ol.get('up') else [],
+               'status': 'up' if ol.get('up') else 'down'}
+        if ol.get('up'):
+            row['last_seen'] = now
+            if ol.get('context_window') is not None:
+                row['context_window'] = ol['context_window']
+        rows.append(row)
 
         ggufs = d.get('ggufs')
         if ggufs is not None:
-            gguf_str = ', '.join(ggufs) if ggufs else '(none found)'
-            lines.append(f'| {host} | ggufs | — | {gguf_str} | — | installed | — |')
+            rows.append({'hostname': host, 'backend': 'ggufs', 'models': ggufs, 'status': 'installed'})
 
-    lines.append('')
-    return lines
+    return rows
 
 
-def build_agent_state(all_rows: list[dict], preserved_buffers: dict[tuple[str, str], str] | None = None) -> list[str]:
+def build_agent_state(all_rows: list[dict], preserved_buffers: dict[tuple[str, str], int] | None = None) -> list[dict]:
     if preserved_buffers is None:
         preserved_buffers = {}
-    lines = [AGENT_STATE_HEADER, f'*Last updated: {ts()}*', '']
-    if not all_rows:
-        lines += ['*No agents configured or discovered.*', '']
-        return lines
-    h = '| ' + ' | '.join(AGENT_COLS) + ' |'
-    sep = '|' + '|'.join('---' for _ in AGENT_COLS) + '|'
-    lines += [h, sep]
+    rows = []
     for row in all_rows:
-        host = row.get('hostname', '—')
-        agent = row.get('agent', '—')
-        buf = preserved_buffers.get((host, agent), '—')
-        row_with_buf = dict(row)
-        row_with_buf['reasoning_buffer'] = buf
-        lines.append('| ' + ' | '.join(str(row_with_buf.get(c, '—')) for c in AGENT_COLS) + ' |')
-    lines.append('')
-    return lines
+        entry = dict(row)
+        buf = preserved_buffers.get((row.get('hostname'), row.get('agent')))
+        if buf is not None:
+            entry['reasoning_buffer'] = buf
+        rows.append(entry)
+    return rows
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -376,15 +278,13 @@ def main() -> None:
         print(f'Topology not found: {path}', file=sys.stderr)
         sys.exit(1)
 
-    with open(path) as f:
-        lines = f.read().splitlines()
-
-    table_start, table_end, cols, rows = parse_full_table(lines)
+    data = read_toml(path)
+    rows = data.get('machines', [])
     if not rows:
         print('No machines table found in topology file.', file=sys.stderr)
         sys.exit(1)
 
-    preserved_buffers = read_existing_agent_reasoning_buffers(lines)
+    preserved_buffers = read_existing_agent_reasoning_buffers(data.get('agent_state', []))
 
     discoveries: dict[str, dict] = {}
     all_agent_rows: list[dict] = []
@@ -392,11 +292,11 @@ def main() -> None:
 
     for row in rows:
         host = row.get('hostname', '').strip()
-        if not host or host == '—':
+        if not host:
             continue
 
-        can_ssh = row.get('ssh', '').strip().lower() == 'yes'
-        user = (row.get('ssh-user', '').strip() or AGENT_SSH_USER) if can_ssh else None
+        can_ssh = row.get('ssh') is True
+        user = (row.get('ssh_user') or AGENT_SSH_USER) if can_ssh else None
         os_name = row.get('os', 'linux')
 
         print(f'{host}:', end=' ', flush=True)
@@ -424,19 +324,17 @@ def main() -> None:
             (f'  agents={agent_summary}' if agent_summary else '')
         )
 
-    if hw_updates and cols:
+    if hw_updates:
         for row in rows:
             host = row.get('hostname', '')
             if host in hw_updates:
                 row.update(hw_updates[host])
-        new_table = build_full_table(cols, rows)
-        lines = lines[:table_start] + new_table + lines[table_end:]
 
-    lines = replace_or_append(lines, MODEL_STATE_HEADER, build_model_state(discoveries))
-    lines = replace_or_append(lines, AGENT_STATE_HEADER, build_agent_state(all_agent_rows, preserved_buffers))
+    data['machines'] = rows
+    data['model_state'] = build_model_state(discoveries)
+    data['agent_state'] = build_agent_state(all_agent_rows, preserved_buffers)
 
-    with open(path, 'w') as f:
-        f.write('\n'.join(lines) + '\n')
+    write_toml(data, path)
 
     print(f'\nTopology updated: {path}')
 

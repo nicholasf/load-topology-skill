@@ -1,6 +1,6 @@
 # Topology
 
-Reads `$TOPOLOGY_PATH` (default `$SKILLS_HOME/topology.md`, fallback `~/.agents/skills/topology.md`) to enumerate available machines and models, then helps the user start a chosen model or refresh the topology.
+Reads `$TOPOLOGIES_HOME/topology.toml` (default `~/.agents/skills/topology.toml` if unset) to enumerate available machines and models, then helps the user start a chosen model or refresh the topology.
 
 ## Step 1 — Load the skills env
 
@@ -14,7 +14,7 @@ This file holds secrets and per-node configuration (API keys, URLs) used by skil
 
 ## Step 2 — Read the topology file
 
-Resolve the path: `$TOPOLOGY_PATH` → `$SKILLS_HOME/topology.md` → `~/.agents/skills/topology.md`.
+Resolve the path: `$TOPOLOGIES_HOME/topology.toml` → `~/.agents/skills/topology.toml`.
 
 If the file does not exist, run the init script to guide first-time setup:
 
@@ -22,7 +22,7 @@ If the file does not exist, run the init script to guide first-time setup:
 PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/topology-skill/src" python3 -m topology.cli init
 ```
 
-The script asks the user to choose a provider (Tailscale or manual), collects any required input, writes `topology.md`, and runs sync automatically. Once it exits successfully, continue to Step 3 with the freshly written file.
+The script asks the user to choose a provider (Tailscale or manual), collects any required input, writes `topology.toml`, and runs sync automatically. Once it exits successfully, continue to Step 3 with the freshly written file.
 
 Do not proceed with cached or assumed knowledge if init fails.
 
@@ -30,11 +30,11 @@ Read the full file.
 
 ## Step 3 — Present the machines table
 
-Display the machines table clearly. Note which machines have `ssh: yes` — these are the ones agents can act on remotely. Note the last-refreshed date if present.
+Display the machines table clearly. Note which machines have `ssh: yes` — these are the ones agents can act on remotely. Note the `last_refreshed` date if present.
 
 ## Step 4 — Present available models and live state
 
-If the topology file contains a `## Model State` section, use it as the primary source — it
+If the topology file contains a `model_state` array, use it as the primary source — it
 reflects the last discover run and shows what is actually installed and running per node,
 including the context window for each backend.
 Present it as a numbered list:
@@ -47,12 +47,12 @@ Available models:
   3. qwen2.5-coder:14b      on gollum  (Ollama / ROCm,       port 11434, ctx 32768) — up
 ```
 
-If there is no `## Model State` section, fall back to per-node model sections in the file,
+If there is no `model_state` array, fall back to any narrative notes in the file,
 or suggest the user run `/topology discover` first.
 
 ## Step 4b — Present agent state
 
-If the topology file contains an `## Agent State` section, present it alongside the models:
+If the topology file contains an `agent_state` array, present it alongside the models:
 
 ```
 Agents:
@@ -61,12 +61,12 @@ Agents:
   pond    goose   ws://pond:3284    — down (process: not found)
 ```
 
-Also check for any `topology-*.md` sidecar files in `$SKILLS_HOME` — these are written by
+Also check for any `topology-*.toml` sidecar files in `$TOPOLOGIES_HOME` — these are written by
 dependent skills (e.g. ask-agent). Read and summarise any that are present.
 
 ## Step 5 — Verify live state if needed
 
-If the user wants a fresh live check beyond what `## Live State` shows, run:
+If the user wants a fresh live check beyond what `model_state` shows, run:
 
 ```bash
 curl -s http://<hostname>:9337/v1/models
@@ -84,7 +84,7 @@ Report the result.
 
 Ask the user which model they want to load (or confirm the current one is fine).
 
-Find the named anchor for their choice (e.g. `### gollum — qwen3-coder-30b`) and display the startup command.
+Find the matching playbook for their choice (`/topology playbook list`) and display its command.
 
 If swapping models, remind the user to kill the existing process first:
 
@@ -121,16 +121,16 @@ When the user says `/topology discover` or "discover topology" or "probe nodes":
 
 2. The script probes every machine in the machines table:
    - HTTP: llama-server (:9337) and Ollama (:11434) for running models
-   - SSH: gpu, vram, local-ip, GGUF inventory at `~/.local/share/gguf/`
-   - HTTP: configured agent endpoints (`hermes_gateway`, `goose_acp_url` columns)
+   - SSH: gpu, vram, local_ip, GGUF inventory at `~/.local/share/gguf/`
+   - HTTP: configured agent endpoints (`hermes_gateway`, `goose_acp_url` fields)
    - SSH: pgrep scan for known agent processes (hermes, goose, aider)
 
-3. It writes two sections into `topology.md`:
-   - `## Model State` — inference backend status, models, context windows, and GGUF inventory per node
-   - `## Agent State` — per-node agent liveness and `reasoning_buffer` (preserved from prior runs)
+3. It writes two arrays into `topology.toml`:
+   - `model_state` — inference backend status, models, context windows, and GGUF inventory per node
+   - `agent_state` — per-node agent liveness and `reasoning_buffer` (preserved from prior runs)
 
-4. Re-read the topology file and present the updated `## Model State` and `## Agent State`
-   tables to the user.
+4. Re-read the topology file and present the updated `model_state` and `agent_state`
+   arrays to the user.
 
 Run discover at the start of a session whenever you need an accurate picture of what is
 actually installed and running, rather than relying on a stale topology.
@@ -146,7 +146,7 @@ When the user says `/topology sync` or "sync topology" or "refresh topology":
    PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/topology-skill/src" python3 -m topology.cli sync
    ```
 2. Report a summary of changes (new machines added, IPs updated, machines marked offline).
-   A single `topology-backup.md` is written before any changes.
+   A single `topology-backup.toml` is written before any changes.
 3. Re-read the updated topology file and present the refreshed machines table.
 
 ---
@@ -167,15 +167,15 @@ When the user says `/topology benchmark <hostname> <model>` or "benchmark llm":
      <hostname> <model> [--port 9337] [--runs 3]
    ```
    Default is 3 runs. The script streams a fixed prompt, measures TTFT (time to first token) and
-   generation throughput (tok/s), averages across runs, then writes an `## LLM Benchmarks` table
-   into the topology file.
+   generation throughput (tok/s), averages across runs, then writes to the `benchmarks`
+   array in the topology file.
 
 3. Report the results:
    ```
    gollum / qwen3-coder-30b:  ttft=312ms  tok/s=46.8  (avg of 3 runs)
    ```
 
-4. Re-read the topology file and show the updated `## LLM Benchmarks` table so the user can
+4. Re-read the topology file and show the updated `benchmarks` array so the user can
    see the new entry alongside any prior results.
 
 ---
@@ -189,14 +189,14 @@ When the user says `/topology show` or "show topology" or "show all topology fil
    PYTHONPATH="${SKILLS_HOME:-$HOME/.agents/skills}/topology-skill/src" python3 -m topology.cli show
    ```
 
-2. The script reads `topology.md` followed by every `topology-*.md` sidecar file in
-   `$SKILLS_HOME`, printing them in sequence separated by a divider.
+2. The script reads `topology.toml` followed by every `topology-*.toml` sidecar file in
+   `$TOPOLOGIES_HOME`, printing them in sequence separated by a divider.
 
 3. Present the combined output to the user. Highlight any sidecar files found so it is
    clear which skill owns which data.
 
 Use this when the user wants a full picture of all topology data in one view — machines
-table, live state, agent state, and any skill-specific sidecars — without running a
+table, model state, agent state, and any skill-specific sidecars — without running a
 fresh probe.
 
 ---
@@ -225,14 +225,14 @@ When the user says `/topology help` or "show help" or "list subcommands":
 
 ## Topology extension convention
 
-Skills that depend on `topology-skill` may add columns to the topology
-table to record their own per-node configuration. The base table covers
+Skills that depend on `topology-skill` may add fields to the machines table
+to record their own per-node configuration. The base table covers
 hostnames, IPs, SSH access, and model availability. Dependent skills extend it
 as needed — for example:
 
-| skill | section | columns added |
+| skill | array | fields added |
 |---|---|---|
-| `ask-agent-skill` | machines table, `## Agent State` | `hermes_gateway`, `hermes_key_env`, `reasoning_buffer` |
+| `ask-agent-skill` | `machines`, `agent_state` | `hermes_gateway`, `hermes_key_env`, `reasoning_buffer` |
 
 `hermes_gateway` is the HTTP URL of the Hermes agent server on that node (e.g.
 `http://pond:8642`). `hermes_key_env` is the name of the env var in
@@ -244,6 +244,6 @@ reasoning before it writes output (e.g. `12000` for Qwen3 with thinking enabled,
 `0` for models without extended thinking). It is set via the `topology` subcommand
 of `ask-agent-skill` and preserved across `discover` runs.
 
-Any skill can follow this pattern: add columns to `topology.md` for structural
+Any skill can follow this pattern: add columns to `topology.toml` for structural
 config, put secrets in `$SKILLS_HOME/.env` under a predictable name, and
 reference the env var name in the table so the skill knows where to look.

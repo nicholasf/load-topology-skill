@@ -3,17 +3,24 @@
 playbook.py — resolve a trigger phrase to a named, alias-tagged sequence of
 host commands ("playbook") and run it.
 
-Invoked via: /topology run "<phrase>" [--skip-oversight]
+Invoked via: /topology run "<phrase>" [--skip-oversight] [--var KEY=VALUE ...]
 
-Playbooks live in $SKILLS_HOME as topology-playbook*.toml:
+Playbooks live in $TOPOLOGIES_HOME as topology-playbook*.toml:
   topology-playbook-<node>.toml  — a playbook whose tasks all target one host
   topology-playbooks.toml        — a playbook composed from more than one host
 
-A task's `hosts` is either a `name` from the topology.md machines table
-(resolved to `hostname`/`ssh-user` and run over SSH) or the reserved
+A task's `hosts` is either a `name` from the topology.toml machines table
+(resolved to `hostname`/`ssh_user` and run over SSH) or the reserved
 `localhost`, which runs as a local subprocess with no SSH and no table
 lookup. A task may instead be a `ref` to another playbook, which is expanded
 in place (composition) — cyclic references are rejected.
+
+A task's `command` may reference `${VAR}` or `${VAR:-default}` placeholders.
+Values come from `--var KEY=VALUE` on the command line; a placeholder with no
+default and no `--var` value is a hard error before anything runs. The
+resolved bindings (value + whether it came from `--var` or a default) are
+always printed before the plan, so a wrong value is caught by inspection, not
+by watching the wrong thing run.
 
 No LLM is involved in resolving a phrase or executing a task: alias matching
 is exact/normalized string comparison, and every task is reviewed (full
@@ -25,14 +32,17 @@ keyword heuristic; explicit authoring always wins over the heuristic.
 import difflib
 import glob
 import os
+import re
 import subprocess
 import sys
 import tomllib
 
-from .discover import AGENT_SSH_USER, parse_full_table
+from .discover import AGENT_SSH_USER
 from .sync import get_topology_path
+from .toml_io import read_toml
 
 HEURISTIC_OVERSIGHT_PATTERNS = ['restart', 'kill', 'stop', 'rm ', 'rm\t', 'drop', 'wipe']
+VAR_PATTERN = re.compile(r'\$\{(\w+)(?::-([^}]*))?\}')
 
 
 class PlaybookError(Exception):
@@ -41,7 +51,7 @@ class PlaybookError(Exception):
 
 # ── Discovery & parsing ─────────────────────────────────────────────────────
 
-def get_skills_home() -> str:
+def get_topologies_home() -> str:
     return os.path.dirname(get_topology_path())
 
 
@@ -148,18 +158,15 @@ def load_machines_table() -> list[dict]:
     path = get_topology_path()
     if not os.path.exists(path):
         return []
-    with open(path) as f:
-        lines = f.read().splitlines()
-    _, _, _, rows = parse_full_table(lines)
-    return rows
+    return read_toml(path).get('machines', [])
 
 
 def resolve_remote_host(hosts: str, machines: list[dict]) -> tuple[str, str]:
-    """Resolve a machines-table `name` to (hostname, ssh-user). Raises if not found."""
+    """Resolve a machines-table `name` to (hostname, ssh_user). Raises if not found."""
     for row in machines:
         if row.get('name') == hosts:
             hostname = row.get('hostname', '').strip() or hosts
-            user = row.get('ssh-user', '').strip() or AGENT_SSH_USER
+            user = row.get('ssh_user', '').strip() or AGENT_SSH_USER
             return hostname, user
     raise PlaybookError(f'unknown host "{hosts}" — not "localhost" and not a name in the machines table')
 
@@ -196,6 +203,48 @@ def flatten(name: str, playbooks: dict[str, dict], machines: list[dict], _stack:
         else:
             flat.append(_resolve_task(task, machines))
     return flat
+
+
+# ── Variable substitution ────────────────────────────────────────────────────
+
+def apply_variables(
+    flat_tasks: list[dict], variables: dict[str, str]
+) -> tuple[list[dict], dict[str, tuple[str, str]]]:
+    """Substitute ${VAR}/${VAR:-default} in each task's command.
+
+    Returns the substituted tasks plus a {name: (value, source)} map of every
+    variable actually referenced, source being 'provided' or 'default', for
+    reporting back to the user before execution. Raises PlaybookError on a
+    placeholder with no --var value and no default.
+    """
+    bindings: dict[str, tuple[str, str]] = {}
+    resolved_tasks = []
+    for t in flat_tasks:
+        command = t['command']
+        for match in VAR_PATTERN.finditer(command):
+            name, default = match.group(1), match.group(2)
+            if name in variables:
+                bindings[name] = (variables[name], 'provided')
+            elif default is not None:
+                bindings.setdefault(name, (default, 'default'))
+            elif name not in bindings:
+                label = t['name'] or command.strip().splitlines()[0]
+                raise PlaybookError(
+                    f'missing variable "{name}" on {t["hosts"]} ({label}) — '
+                    f'pass --var {name}=... or give the placeholder a default'
+                )
+        resolved_tasks.append({**t, 'command': VAR_PATTERN.sub(lambda m: bindings[m.group(1)][0], command)})
+    return resolved_tasks, bindings
+
+
+def print_variables(bindings: dict[str, tuple[str, str]]) -> None:
+    if not bindings:
+        return
+    print('Variables:')
+    for name, (value, source) in sorted(bindings.items()):
+        print(f'  {name} = {value}  ({source})')
+    print()
+    sys.stdout.flush()
 
 
 # ── Review, execution ─────────────────────────────────────────────────────────
@@ -272,7 +321,7 @@ def print_list(playbooks: dict[str, dict]) -> None:
 
 def list_main(argv: list[str]) -> None:
     try:
-        playbooks = load_playbooks(get_skills_home())
+        playbooks = load_playbooks(get_topologies_home())
     except PlaybookError as e:
         print(f'Error: {e}', file=sys.stderr)
         sys.exit(1)
@@ -290,18 +339,46 @@ def playbook_main(argv: list[str]) -> None:
     PLAYBOOK_SUBCOMMANDS[subcommand](rest)
 
 
+USAGE = 'Usage: topology run "<phrase>" [--skip-oversight] [--var KEY=VALUE ...]'
+
+
+def parse_argv(argv: list[str]) -> tuple[str, bool, dict[str, str]]:
+    """Split argv into (phrase, skip_oversight, variables), pulling out flags."""
+    skip_oversight = False
+    variables: dict[str, str] = {}
+    phrase_parts = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == '--skip-oversight':
+            skip_oversight = True
+        elif arg == '--var':
+            i += 1
+            if i >= len(argv) or '=' not in argv[i]:
+                raise PlaybookError('--var requires KEY=VALUE')
+            key, _, value = argv[i].partition('=')
+            variables[key] = value
+        else:
+            phrase_parts.append(arg)
+        i += 1
+    return ' '.join(phrase_parts).strip(), skip_oversight, variables
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main(argv: list[str]) -> None:
-    skip_oversight = '--skip-oversight' in argv
-    phrase = ' '.join(a for a in argv if a != '--skip-oversight').strip()
+    try:
+        phrase, skip_oversight, variables = parse_argv(argv)
+    except PlaybookError as e:
+        print(f'Error: {e}', file=sys.stderr)
+        sys.exit(1)
 
     if not phrase:
-        print('Usage: topology run "<phrase>" [--skip-oversight]', file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         sys.exit(1)
 
     try:
-        playbooks = load_playbooks(get_skills_home())
+        playbooks = load_playbooks(get_topologies_home())
     except PlaybookError as e:
         print(f'Error: {e}', file=sys.stderr)
         sys.exit(1)
@@ -318,10 +395,12 @@ def main(argv: list[str]) -> None:
 
     try:
         flat = flatten(name, playbooks, load_machines_table())
+        flat, bindings = apply_variables(flat, variables)
     except PlaybookError as e:
         print(f'Error: {e}', file=sys.stderr)
         sys.exit(1)
 
+    print_variables(bindings)
     print_review(flat)
     sys.exit(execute(flat, skip_oversight=skip_oversight))
 

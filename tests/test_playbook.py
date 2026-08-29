@@ -5,12 +5,14 @@ import pytest
 from topology.playbook import (
     AGENT_SSH_USER,
     PlaybookError,
+    apply_variables,
     classify_oversight,
     execute,
     flatten,
     list_playbook_files,
     load_playbooks,
     near_miss_candidates,
+    parse_argv,
     parse_playbook_file,
     playbook_main,
     print_list,
@@ -179,12 +181,12 @@ def test_oversight_default_false():
 # ── host resolution ────────────────────────────────────────────────────────────
 
 def test_resolve_remote_host_uses_hostname_and_ssh_user():
-    machines = [{'name': 'pond', 'hostname': 'pond.tailnet', 'ssh-user': 'someone'}]
+    machines = [{'name': 'pond', 'hostname': 'pond.tailnet', 'ssh_user': 'someone'}]
     assert resolve_remote_host('pond', machines) == ('pond.tailnet', 'someone')
 
 
 def test_resolve_remote_host_falls_back_to_agent_ssh_user():
-    machines = [{'name': 'pond', 'hostname': 'pond.tailnet', 'ssh-user': ''}]
+    machines = [{'name': 'pond', 'hostname': 'pond.tailnet', 'ssh_user': ''}]
     assert resolve_remote_host('pond', machines) == ('pond.tailnet', AGENT_SSH_USER)
 
 
@@ -200,7 +202,7 @@ def test_flatten_cross_node_composition(tmp_path):
     write(tmp_path, 'topology-playbook-localhost.toml', LOCALHOST_TOML)
     write(tmp_path, 'topology-playbooks.toml', SHARED_TOML.replace('wake pond up', 'verify all'))
     playbooks = load_playbooks(str(tmp_path))
-    machines = [{'name': 'pond', 'hostname': 'pond.tailnet', 'ssh-user': 'nicholasf'}]
+    machines = [{'name': 'pond', 'hostname': 'pond.tailnet', 'ssh_user': 'nicholasf'}]
 
     flat = flatten('verify-pond-qwen-via-pi', playbooks, machines)
 
@@ -333,11 +335,79 @@ def test_print_list_sorted_by_name(tmp_path, capsys):
 
 def test_playbook_main_list_dispatches(tmp_path, capsys, monkeypatch):
     write(tmp_path, 'topology-playbook-pond.toml', POND_TOML)
-    monkeypatch.setattr('topology.playbook.get_skills_home', lambda: str(tmp_path))
+    monkeypatch.setattr('topology.playbook.get_topologies_home', lambda: str(tmp_path))
 
     playbook_main(['list'])
-
     assert 'start-pond-qwen' in capsys.readouterr().out
+
+
+# ── argv parsing ─────────────────────────────────────────────────────────────
+
+def test_parse_argv_plain_phrase():
+    assert parse_argv(['wake', 'pond', 'up']) == ('wake pond up', False, {})
+
+
+def test_parse_argv_skip_oversight_flag():
+    assert parse_argv(['wake', 'pond', 'up', '--skip-oversight']) == ('wake pond up', True, {})
+
+
+def test_parse_argv_single_var():
+    assert parse_argv(['start', 'pi', '--var', 'session=work']) == ('start pi', False, {'session': 'work'})
+
+
+def test_parse_argv_multiple_vars_and_skip_oversight():
+    phrase, skip, variables = parse_argv(
+        ['start', 'pi', '--var', 'session=work', '--skip-oversight', '--var', 'window=main']
+    )
+    assert phrase == 'start pi'
+    assert skip is True
+    assert variables == {'session': 'work', 'window': 'main'}
+
+
+def test_parse_argv_var_missing_value_raises():
+    with pytest.raises(PlaybookError):
+        parse_argv(['start', 'pi', '--var'])
+
+
+def test_parse_argv_var_missing_equals_raises():
+    with pytest.raises(PlaybookError):
+        parse_argv(['start', 'pi', '--var', 'session'])
+
+
+# ── variable substitution ──────────────────────────────────────────────────────
+
+def test_apply_variables_uses_provided_value():
+    tasks = [_task(command='tmux new-window -t "${session}" -n pi \'pi\'')]
+    resolved, bindings = apply_variables(tasks, {'session': 'work'})
+    assert resolved[0]['command'] == 'tmux new-window -t "work" -n pi \'pi\''
+    assert bindings == {'session': ('work', 'provided')}
+
+
+def test_apply_variables_uses_default_when_not_provided():
+    tasks = [_task(command='tmux new-window -t "${session:-local}" -n pi \'pi\'')]
+    resolved, bindings = apply_variables(tasks, {})
+    assert resolved[0]['command'] == 'tmux new-window -t "local" -n pi \'pi\''
+    assert bindings == {'session': ('local', 'default')}
+
+
+def test_apply_variables_provided_overrides_default():
+    tasks = [_task(command='echo ${session:-local}')]
+    resolved, bindings = apply_variables(tasks, {'session': 'work'})
+    assert resolved[0]['command'] == 'echo work'
+    assert bindings == {'session': ('work', 'provided')}
+
+
+def test_apply_variables_missing_no_default_raises():
+    tasks = [_task(command='echo ${session}')]
+    with pytest.raises(PlaybookError, match='session'):
+        apply_variables(tasks, {})
+
+
+def test_apply_variables_no_placeholders_is_noop():
+    tasks = [_task(command='echo hi')]
+    resolved, bindings = apply_variables(tasks, {})
+    assert resolved[0]['command'] == 'echo hi'
+    assert bindings == {}
 
 
 def test_playbook_main_unknown_subcommand_exits_nonzero(capsys):

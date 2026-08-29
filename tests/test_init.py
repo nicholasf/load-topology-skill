@@ -1,70 +1,38 @@
+import argparse
 import os
 from unittest.mock import patch
 
 import pytest
 
 from topology.init import (
-    MANUAL_COLUMNS,
-    TAILSCALE_COLUMNS,
-    build_table,
     get_topology_path,
     machines_to_rows,
     parse_machines_arg,
     write_topology,
 )
+from topology.toml_io import read_toml
 
 
 # -- get_topology_path --
 
-def test_get_topology_path_uses_skills_home(monkeypatch, tmp_path):
-    monkeypatch.setenv('SKILLS_HOME', str(tmp_path))
-    assert get_topology_path() == str(tmp_path / 'topology.md')
+def test_get_topology_path_uses_topologies_home(monkeypatch, tmp_path):
+    monkeypatch.setenv('TOPOLOGIES_HOME', str(tmp_path))
+    assert get_topology_path() == str(tmp_path / 'topology.toml')
 
 
 def test_get_topology_path_defaults_when_unset(monkeypatch):
-    monkeypatch.delenv('SKILLS_HOME', raising=False)
-    assert get_topology_path().endswith('topology.md')
-
-
-# -- build_table --
-
-def test_build_table_empty_tailscale():
-    lines = build_table(TAILSCALE_COLUMNS)
-    assert len(lines) == 2
-    assert lines[0].startswith('| name |')
-    assert 'tailscale-ip' in lines[0]
-    assert '---' in lines[1]
-
-
-def test_build_table_empty_manual():
-    lines = build_table(MANUAL_COLUMNS)
-    assert 'local-ip' in lines[0]
-    assert 'tailscale-ip' not in lines[0]
-
-
-def test_build_table_with_rows():
-    rows = [{'name': 'pond', 'hostname': 'pond', 'local-ip': '192.168.86.118'}]
-    lines = build_table(MANUAL_COLUMNS, rows)
-    assert len(lines) == 3
-    assert 'pond' in lines[2]
-    assert '192.168.86.118' in lines[2]
+    monkeypatch.delenv('TOPOLOGIES_HOME', raising=False)
+    assert get_topology_path().endswith('topology.toml')
 
 
 # -- machines_to_rows --
 
 def test_machines_to_rows_sets_name_and_hostname():
     machines = [{'hostname': 'pond', 'ip': '192.168.86.118'}]
-    rows = machines_to_rows(machines, MANUAL_COLUMNS)
+    rows = machines_to_rows(machines)
     assert rows[0]['name'] == 'pond'
     assert rows[0]['hostname'] == 'pond'
-    assert rows[0]['local-ip'] == '192.168.86.118'
-
-
-def test_machines_to_rows_fills_remaining_columns_with_dash():
-    machines = [{'hostname': 'pond', 'ip': '192.168.86.118'}]
-    rows = machines_to_rows(machines, MANUAL_COLUMNS)
-    assert rows[0]['os'] == '—'
-    assert rows[0]['gpu'] == '—'
+    assert rows[0]['local_ip'] == '192.168.86.118'
 
 
 def test_machines_to_rows_multiple():
@@ -72,7 +40,7 @@ def test_machines_to_rows_multiple():
         {'hostname': 'pond', 'ip': '192.168.86.118'},
         {'hostname': 'gollum', 'ip': '192.168.86.50'},
     ]
-    rows = machines_to_rows(machines, MANUAL_COLUMNS)
+    rows = machines_to_rows(machines)
     assert len(rows) == 2
     assert rows[1]['hostname'] == 'gollum'
 
@@ -91,7 +59,6 @@ def test_parse_machines_arg_multiple():
 
 
 def test_parse_machines_arg_invalid_raises():
-    import argparse
     with pytest.raises(argparse.ArgumentTypeError):
         parse_machines_arg('just-hostname')
 
@@ -99,77 +66,76 @@ def test_parse_machines_arg_invalid_raises():
 # -- write_topology --
 
 def test_write_topology_creates_file(tmp_path):
-    path = str(tmp_path / 'topology.md')
-    table = build_table(MANUAL_COLUMNS)
-    write_topology('manual', table, path)
+    path = str(tmp_path / 'topology.toml')
+    write_topology('manual', [], path)
     assert os.path.exists(path)
-    content = open(path).read()
-    assert '**Provider:** manual' in content
-    assert '**Schema version:** 1' in content
-    assert '**Last refreshed:**' in content
-    assert '| name |' in content
-
-
-def test_write_topology_tailscale_includes_tailscale_ip(tmp_path):
-    path = str(tmp_path / 'topology.md')
-    table = build_table(TAILSCALE_COLUMNS)
-    write_topology('tailscale', table, path)
-    content = open(path).read()
-    assert '**Provider:** tailscale' in content
-    assert 'tailscale-ip' in content
+    data = read_toml(path)
+    assert data['provider'] == 'manual'
+    assert data['schema_version'] == 1
+    assert 'last_refreshed' in data
+    assert data.get('machines', []) == []
 
 
 def test_write_topology_creates_parent_dirs(tmp_path):
-    path = str(tmp_path / 'nested' / 'dir' / 'topology.md')
-    write_topology('manual', build_table(MANUAL_COLUMNS), path)
+    path = str(tmp_path / 'nested' / 'dir' / 'topology.toml')
+    write_topology('manual', [], path)
     assert os.path.exists(path)
+
+
+def test_write_topology_includes_machines(tmp_path):
+    path = str(tmp_path / 'topology.toml')
+    write_topology('manual', [{'name': 'pond', 'hostname': 'pond', 'local_ip': '192.168.86.118'}], path)
+    data = read_toml(path)
+    assert data['machines'][0]['hostname'] == 'pond'
+    assert data['machines'][0]['local_ip'] == '192.168.86.118'
 
 
 # -- main() integration --
 
 def test_main_tailscale_non_interactive(tmp_path, monkeypatch):
-    monkeypatch.setenv('SKILLS_HOME', str(tmp_path))
+    monkeypatch.setenv('TOPOLOGIES_HOME', str(tmp_path))
     with patch('topology.init.run_sync', return_value=True):
         from topology.init import main
         import sys
         with patch.object(sys, 'argv', ['init.py', '--provider', 'tailscale']):
             main()
-    content = (tmp_path / 'topology.md').read_text()
-    assert '**Provider:** tailscale' in content
-    assert 'tailscale-ip' in content
+    data = read_toml(str(tmp_path / 'topology.toml'))
+    assert data['provider'] == 'tailscale'
+    assert data.get('machines', []) == []
 
 
 def test_main_manual_non_interactive(tmp_path, monkeypatch):
-    monkeypatch.setenv('SKILLS_HOME', str(tmp_path))
+    monkeypatch.setenv('TOPOLOGIES_HOME', str(tmp_path))
     with patch('topology.init.run_sync', return_value=True):
         from topology.init import main
         import sys
         with patch.object(sys, 'argv', ['init.py', '--provider', 'manual', '--machines', 'pond 192.168.86.118']):
             main()
-    content = (tmp_path / 'topology.md').read_text()
-    assert '**Provider:** manual' in content
-    assert '192.168.86.118' in content
-    assert 'pond' in content
+    data = read_toml(str(tmp_path / 'topology.toml'))
+    assert data['provider'] == 'manual'
+    assert data['machines'][0]['hostname'] == 'pond'
+    assert data['machines'][0]['local_ip'] == '192.168.86.118'
 
 
 def test_main_exits_if_topology_exists_without_force(tmp_path, monkeypatch):
-    monkeypatch.setenv('SKILLS_HOME', str(tmp_path))
-    (tmp_path / 'topology.md').write_text('existing')
+    monkeypatch.setenv('TOPOLOGIES_HOME', str(tmp_path))
+    (tmp_path / 'topology.toml').write_text('provider = "manual"\n')
     import sys
     with patch.object(sys, 'argv', ['init.py', '--provider', 'tailscale']):
         with pytest.raises(SystemExit) as exc:
             from topology.init import main
             main()
     assert exc.value.code == 0
-    assert (tmp_path / 'topology.md').read_text() == 'existing'
+    assert 'manual' in (tmp_path / 'topology.toml').read_text()
 
 
 def test_main_force_overwrites_existing(tmp_path, monkeypatch):
-    monkeypatch.setenv('SKILLS_HOME', str(tmp_path))
-    (tmp_path / 'topology.md').write_text('old content')
+    monkeypatch.setenv('TOPOLOGIES_HOME', str(tmp_path))
+    (tmp_path / 'topology.toml').write_text('provider = "old"\n')
     with patch('topology.init.run_sync', return_value=True):
         import sys
         with patch.object(sys, 'argv', ['init.py', '--provider', 'manual', '--machines', 'pond 192.168.86.118', '--force']):
             from topology.init import main
             main()
-    assert 'old content' not in (tmp_path / 'topology.md').read_text()
+    data = read_toml(str(tmp_path / 'topology.toml'))
+    assert data['provider'] == 'manual'

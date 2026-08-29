@@ -1,14 +1,9 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from topology.discover import (
-    MODEL_STATE_HEADER,
-    AGENT_STATE_HEADER,
     build_agent_state,
     build_model_state,
-    find_section,
     probe_llama_context_window,
     probe_ollama_context_window,
     read_existing_agent_reasoning_buffers,
@@ -19,17 +14,17 @@ from topology.discover import (
 
 def test_probe_llama_context_window_returns_n_ctx():
     with patch('topology.discover.http_json', return_value={'n_ctx': 65536}):
-        assert probe_llama_context_window('pond') == '65536'
+        assert probe_llama_context_window('pond') == 65536
 
 
-def test_probe_llama_context_window_missing_key_returns_dash():
+def test_probe_llama_context_window_missing_key_returns_none():
     with patch('topology.discover.http_json', return_value={'other_key': 'value'}):
-        assert probe_llama_context_window('pond') == '—'
+        assert probe_llama_context_window('pond') is None
 
 
-def test_probe_llama_context_window_server_down_returns_dash():
+def test_probe_llama_context_window_server_down_returns_none():
     with patch('topology.discover.http_json', return_value=None):
-        assert probe_llama_context_window('pond') == '—'
+        assert probe_llama_context_window('pond') is None
 
 
 # ── probe_ollama_context_window ───────────────────────────────────────────────
@@ -45,30 +40,30 @@ def _mock_urlopen(response_data: dict):
 def test_probe_ollama_context_window_returns_context_length():
     mock_resp = _mock_urlopen({'model_info': {'llama.context_length': 131072}})
     with patch('urllib.request.urlopen', return_value=mock_resp):
-        assert probe_ollama_context_window('gollum', 'qwen3-coder:30b') == '131072'
+        assert probe_ollama_context_window('gollum', 'qwen3-coder:30b') == 131072
 
 
 def test_probe_ollama_context_window_matches_any_architecture_prefix():
     mock_resp = _mock_urlopen({'model_info': {'qwen2.context_length': 32768}})
     with patch('urllib.request.urlopen', return_value=mock_resp):
-        assert probe_ollama_context_window('gollum', 'qwen2.5-coder:14b') == '32768'
+        assert probe_ollama_context_window('gollum', 'qwen2.5-coder:14b') == 32768
 
 
-def test_probe_ollama_context_window_missing_model_info_returns_dash():
+def test_probe_ollama_context_window_missing_model_info_returns_none():
     mock_resp = _mock_urlopen({})
     with patch('urllib.request.urlopen', return_value=mock_resp):
-        assert probe_ollama_context_window('gollum', 'qwen3-coder:30b') == '—'
+        assert probe_ollama_context_window('gollum', 'qwen3-coder:30b') is None
 
 
-def test_probe_ollama_context_window_missing_context_length_key_returns_dash():
+def test_probe_ollama_context_window_missing_context_length_key_returns_none():
     mock_resp = _mock_urlopen({'modelinfo': {'other': 'data'}})
     with patch('urllib.request.urlopen', return_value=mock_resp):
-        assert probe_ollama_context_window('gollum', 'qwen3-coder:30b') == '—'
+        assert probe_ollama_context_window('gollum', 'qwen3-coder:30b') is None
 
 
-def test_probe_ollama_context_window_exception_returns_dash():
+def test_probe_ollama_context_window_exception_returns_none():
     with patch('urllib.request.urlopen', side_effect=Exception('connection refused')):
-        assert probe_ollama_context_window('gollum', 'qwen3-coder:30b') == '—'
+        assert probe_ollama_context_window('gollum', 'qwen3-coder:30b') is None
 
 
 # ── build_model_state ─────────────────────────────────────────────────────────
@@ -76,41 +71,39 @@ def test_probe_ollama_context_window_exception_returns_dash():
 SAMPLE_DISCOVERIES = {
     'pond': {
         'models': {
-            'llama_server': {'up': True, 'models': ['qwen3-coder-30b.gguf'], 'context_window': '65536'},
-            'ollama': {'up': False, 'models': [], 'context_window': '—'},
+            'llama_server': {'up': True, 'models': ['qwen3-coder-30b.gguf'], 'context_window': 65536},
+            'ollama': {'up': False, 'models': [], 'context_window': None},
         },
         'ggufs': None,
     }
 }
 
 
-def test_build_model_state_header_is_model_state():
-    lines = build_model_state(SAMPLE_DISCOVERIES)
-    assert lines[0] == MODEL_STATE_HEADER
+def test_build_model_state_includes_context_window_for_up_backend():
+    rows = build_model_state(SAMPLE_DISCOVERIES)
+    llama_row = next(r for r in rows if r['backend'] == 'llama-server')
+    assert llama_row['context_window'] == 65536
+    assert llama_row['status'] == 'up'
 
 
-def test_build_model_state_includes_context_window_column():
-    lines = build_model_state(SAMPLE_DISCOVERIES)
-    header_line = next(l for l in lines if l.startswith('| hostname'))
-    assert 'context_window' in header_line
-
-
-def test_build_model_state_context_window_value_in_row():
-    lines = build_model_state(SAMPLE_DISCOVERIES)
-    llama_row = next(l for l in lines if 'llama-server' in l and 'pond' in l)
-    assert '65536' in llama_row
-
-
-def test_build_model_state_down_backend_shows_dash_for_context():
-    lines = build_model_state(SAMPLE_DISCOVERIES)
-    ollama_row = next(l for l in lines if 'ollama' in l and 'pond' in l)
-    assert 'down' in ollama_row
+def test_build_model_state_down_backend_omits_context_window():
+    rows = build_model_state(SAMPLE_DISCOVERIES)
+    ollama_row = next(r for r in rows if r['backend'] == 'ollama')
+    assert ollama_row['status'] == 'down'
+    assert 'context_window' not in ollama_row
+    assert 'last_seen' not in ollama_row
 
 
 def test_build_model_state_empty_discoveries():
-    lines = build_model_state({})
-    assert lines[0] == MODEL_STATE_HEADER
-    assert any('| hostname' in l for l in lines)
+    assert build_model_state({}) == []
+
+
+def test_build_model_state_ggufs_row_only_when_ggufs_not_none():
+    discoveries = {'pond': {'models': SAMPLE_DISCOVERIES['pond']['models'], 'ggufs': ['a.gguf', 'b.gguf']}}
+    rows = build_model_state(discoveries)
+    gguf_row = next(r for r in rows if r['backend'] == 'ggufs')
+    assert gguf_row['models'] == ['a.gguf', 'b.gguf']
+    assert gguf_row['status'] == 'installed'
 
 
 # ── build_agent_state ─────────────────────────────────────────────────────────
@@ -122,82 +115,41 @@ SAMPLE_AGENT_ROWS = [
         'endpoint': 'http://pond:8642',
         'status': 'up',
         'process': 'running',
-        'last-seen': '2026-06-08T09-00-00',
+        'last_seen': '2026-06-08T09-00-00',
     }
 ]
 
 
-def test_build_agent_state_includes_reasoning_buffer_column():
-    lines = build_agent_state(SAMPLE_AGENT_ROWS)
-    header_line = next(l for l in lines if l.startswith('| hostname'))
-    assert 'reasoning_buffer' in header_line
-
-
-def test_build_agent_state_defaults_reasoning_buffer_to_dash():
-    lines = build_agent_state(SAMPLE_AGENT_ROWS, preserved_buffers={})
-    data_row = next(l for l in lines if 'hermes' in l and 'pond' in l)
-    assert data_row.endswith('| — |')
+def test_build_agent_state_no_preserved_buffer_omits_key():
+    rows = build_agent_state(SAMPLE_AGENT_ROWS, preserved_buffers={})
+    assert 'reasoning_buffer' not in rows[0]
 
 
 def test_build_agent_state_preserves_existing_reasoning_buffer():
-    preserved = {('pond', 'hermes'): '12000'}
-    lines = build_agent_state(SAMPLE_AGENT_ROWS, preserved_buffers=preserved)
-    data_row = next(l for l in lines if 'hermes' in l and 'pond' in l)
-    assert '12000' in data_row
+    preserved = {('pond', 'hermes'): 12000}
+    rows = build_agent_state(SAMPLE_AGENT_ROWS, preserved_buffers=preserved)
+    assert rows[0]['reasoning_buffer'] == 12000
 
 
-def test_build_agent_state_no_rows_returns_empty_notice():
-    lines = build_agent_state([])
-    assert any('No agents' in l for l in lines)
-
-
-def test_build_agent_state_header_is_agent_state():
-    lines = build_agent_state(SAMPLE_AGENT_ROWS)
-    assert lines[0] == AGENT_STATE_HEADER
+def test_build_agent_state_no_rows_returns_empty_list():
+    assert build_agent_state([]) == []
 
 
 # ── read_existing_agent_reasoning_buffers ─────────────────────────────────────
 
-TOPOLOGY_WITH_BUFFERS = """## Agent State
-*Last updated: 2026-06-08T09-00-00*
-
-| hostname | agent | endpoint | status | process | last-seen | reasoning_buffer |
-|---|---|---|---|---|---|---|
-| pond | hermes | http://pond:8642 | up | running | 2026-06-08 | 12000 |
-| pond | goose | ws://pond:3284 | down | not found | — | — |
-""".splitlines()
-
-TOPOLOGY_NO_AGENT_STATE = """# Topology
-
-| name | hostname |
-|---|---|
-| — | pond |
-""".splitlines()
-
-
 def test_read_existing_buffers_finds_values():
-    result = read_existing_agent_reasoning_buffers(TOPOLOGY_WITH_BUFFERS)
-    assert result[('pond', 'hermes')] == '12000'
+    agent_state = [
+        {'hostname': 'pond', 'agent': 'hermes', 'reasoning_buffer': 12000},
+        {'hostname': 'pond', 'agent': 'goose', 'status': 'down'},
+    ]
+    result = read_existing_agent_reasoning_buffers(agent_state)
+    assert result == {('pond', 'hermes'): 12000}
 
 
-def test_read_existing_buffers_dash_for_unset():
-    result = read_existing_agent_reasoning_buffers(TOPOLOGY_WITH_BUFFERS)
-    assert result[('pond', 'goose')] == '—'
+def test_read_existing_buffers_empty_when_no_agent_state():
+    assert read_existing_agent_reasoning_buffers([]) == {}
 
 
-def test_read_existing_buffers_empty_when_no_section():
-    result = read_existing_agent_reasoning_buffers(TOPOLOGY_NO_AGENT_STATE)
-    assert result == {}
-
-
-def test_read_existing_buffers_empty_when_no_reasoning_buffer_column():
-    lines = """## Agent State
-*Last updated: 2026-06-08T09-00-00*
-
-| hostname | agent | endpoint | status | process | last-seen |
-|---|---|---|---|---|---|
-| pond | hermes | http://pond:8642 | up | running | 2026-06-08 |
-""".splitlines()
-    result = read_existing_agent_reasoning_buffers(lines)
-    # reasoning_buffer column absent — default '—'
-    assert result[('pond', 'hermes')] == '—'
+def test_read_existing_buffers_skips_rows_without_reasoning_buffer():
+    agent_state = [{'hostname': 'pond', 'agent': 'hermes', 'status': 'up'}]
+    assert read_existing_agent_reasoning_buffers(agent_state) == {}
