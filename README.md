@@ -2,7 +2,25 @@
 
 Under development.
 
-Topology lets you record commands as an ordered list of *tasks* — much like a pipeline file — grouped into a named *playbook* and triggered by a natural language phrase: "clean up docker" or "wake pond up". A phrase might resolve to a playbook with one task or a dozen; that's the author's choice, not a rule the tool enforces. Playbooks work standalone on your own machine (`localhost`) with no setup at all. They also extend across every other machine you own once you build a *topology* — a markdown picture of the *nodes* (machines) an agent can reach, by name, either via ssh or on localhost. You can write other skills that build sidecar topology documents, for e.g. [ask-agent-skill](https://github.com/nicholasf/ask-agent-skill), [track-tasks-skill](https://github.com/nicholasf/track-tasks-skill).
+
+Topology lets you do things with machines on your network. It could just be your localhost. I wrote it because I run LLMs on two machines in my house. Since then it's usage has widened a little.
+
+... finish this later - get the prototype working.
+
+
+Steps:
+
+1. Map a topology
+   1. localhost
+   2. tailscale
+   3. manual
+2. View your topology
+3. Run a command
+4. Record a command in a node playbook (localhost, remote machine)
+
+
+
+You can record commands as an ordered list of *tasks* — much like a pipeline file — grouped into a named *playbook* and triggered by a natural language phrase: "clean up docker" or "wake pond up". A phrase might resolve to a playbook with one task or a dozen; that's the author's choice, not a rule the tool enforces. Playbooks work standalone on your own machine (`localhost`) with no setup at all. They also extend across every other machine you own once you build a *topology* — a markdown picture of the *nodes* (machines) an agent can reach, by name, either via ssh or on localhost. You can write other skills that build sidecar topology documents, for e.g. [ask-agent-skill](https://github.com/nicholasf/ask-agent-skill), [track-tasks-skill](https://github.com/nicholasf/track-tasks-skill).
 
 This obviously carries security issues about trusting agents on your network and recording sensitive data and application structures in markdown and TOML. All files are prefixed with `topology-` for inclusion in ignore files and patterns. They are about as sensitive as any devops configuration file, so treat them as such.
 
@@ -28,7 +46,7 @@ pip install -e .   # or: uv pip install -e .
 
 Playbooks that target `localhost` need no topology at all — `hosts = "localhost"` always means
 "the machine running this command," nothing to set up first. Create
-`topology-playbook-localhost.toml` in `$SKILLS_HOME` (default `~/.agents/skills`):
+`topology-playbook-localhost.toml` in `$TOPOLOGIES_HOME` (default `~/.agents/skills`):
 
 ```toml
 [[playbook]]
@@ -84,7 +102,7 @@ If you're using Claude Code, just run `/topology` — if no topology exists yet 
 topology init       # or: python3 -m topology.cli init
 ```
 
-It asks for your provider choice and, for manual mode, your machine hostnames and IPs. It writes `topology.md` and runs sync automatically.
+It asks for your provider choice and, for manual mode, your machine hostnames and IPs. It writes `topology.toml` and runs sync automatically.
 
 This is a home lab tool. It does not try to solve enterprise concerns like multiple SSH identities, key rotation, or multi-tenant access. It assumes you own all the machines, you have set up SSH keys, and you want your agent to know as much about your setup as you do.
 
@@ -94,7 +112,7 @@ This is a home lab tool. It does not try to solve enterprise concerns like multi
 /topology discover
 ```
 
-Probes every machine over SSH and HTTP — GPU/VRAM, GGUF inventory, running inference backends, agent endpoints — and writes it into `topology.md`. Run `/topology` afterward to see the machines table and what's running where. Say your topology has a machine named `pond` with an RTX 4090 and no model currently running — that's the node the rest of this section acts on.
+Probes every machine over SSH and HTTP — GPU/VRAM, GGUF inventory, running inference backends, agent endpoints — and writes it into `topology.toml`. Run `/topology` afterward to see the machines table and what's running where. Say your topology has a machine named `pond` with an RTX 4090 and no model currently running — that's the node the rest of this section acts on.
 
 ### Record a playbook that targets it
 
@@ -133,17 +151,17 @@ Probe every node: finds running models, agents, GPU/VRAM, GGUF inventory. Do thi
 ```
 /topology sync
 ```
-Pull fresh Tailscale IPs and online status into `topology.md`. Run after adding a machine or when IPs change.
+Pull fresh Tailscale IPs and online status into `topology.toml`. Run after adding a machine or when IPs change.
 
 ```
 /topology benchmark pond qwen3-coder-30b
 ```
-Measure TTFT and token throughput across three runs; writes results into `topology.md`.
+Measure TTFT and token throughput across three runs; writes results into `topology.toml`.
 
 ```
 /topology show
 ```
-Print the full topology — machines, live state, agent state, and all skill sidecars — in one view.
+Print the full topology — machines, model state, agent state, and all skill sidecars — in one view.
 
 ```
 /topology run "wake pond up"
@@ -173,37 +191,37 @@ List every playbook — name, description, aliases, source file — across every
 <a id="discover"></a>
 **`/topology discover`**
 
-Probes every machine in the topology over SSH and HTTP. For each node it collects GPU/VRAM, local IP, GGUF inventory, running inference backends (llama-server and Ollama), and configured agent endpoints (Hermes, Goose). Results are written into two sections in `topology.md`:
+Probes every machine in the topology over SSH and HTTP. For each node it collects GPU/VRAM, local IP, GGUF inventory, running inference backends (llama-server and Ollama), and configured agent endpoints (Hermes, Goose). Results are written into two arrays in `topology.toml`:
 
-- `## Live State` — inference backend status and GGUF inventory per node
-- `## Agent State` — per-node agent liveness
+- `model_state` — inference backend status, models, context windows, and GGUF inventory per node
+- `agent_state` — per-node agent liveness
 
-Run this at the start of a session to get an accurate picture of what is installed and running. The skill's main workflow uses these sections as the primary source for model and agent state.
+Run this at the start of a session to get an accurate picture of what is installed and running. The skill's main workflow uses these arrays as the primary source for model and agent state.
 
 <a id="topology"></a>
 **`/topology`**
 
-Reads `topology.md`, presents the machines table and available models, and lets you start or swap a running model. Use it whenever you want the agent to know what is in your mesh before delegating a workload.
+Reads `topology.toml`, presents the machines table and available models, and lets you start or swap a running model. Use it whenever you want the agent to know what is in your mesh before delegating a workload.
 
 <a id="sync"></a>
 **`/topology sync`**
 
-Refreshes the machines table and writes `topology-backup.md` before making any changes. Behaviour depends on the provider set in `topology.md`: Tailscale mode queries `tailscale status` to update IPs and online status; manual mode reads the `local-ip` values you entered and validates the table. Manual columns (role, GPU, VRAM, SSH access) are preserved either way.
+Refreshes the machines table and writes `topology-backup.toml` before making any changes. Behaviour depends on the provider set in `topology.toml`: Tailscale mode queries `tailscale status` to update IPs and online status; manual mode reads the `local_ip` values you entered and validates the table. Manual fields (role, GPU, VRAM, SSH access) are preserved either way.
 
 <a id="benchmark"></a>
 **`/topology benchmark <hostname> <model>`**
 
-Runs the `benchmark` subcommand against a live llama-server on the named host and writes results into the `## LLM Benchmarks` table in `topology.md`.
+Runs the `benchmark` subcommand against a live llama-server on the named host and writes results into the `benchmarks` array in `topology.toml`.
 
 <a id="show"></a>
 **`/topology show`**
 
-Prints `topology.md` and every `topology-*.md` sidecar file in `$SKILLS_HOME` as a single combined view.
+Prints `topology.toml` and every `topology-*.toml` sidecar file in `$TOPOLOGIES_HOME` as a single combined view.
 
 <a id="run"></a>
 **`/topology run "<phrase>"`**
 
-Resolves the phrase against every playbook's aliases (see [Playbooks](#playbooks)), prints the full flattened plan, then runs each task in order, stopping at the first failure. Add `--skip-oversight` to run without pausing for individual task confirmation — the plan still always prints first.
+Resolves the phrase against every playbook's aliases (see [Playbooks](#playbooks)), prints the full flattened plan, then runs each task in order, stopping at the first failure. Add `--skip-oversight` to run without pausing for individual task confirmation — the plan still always prints first. Add `--var KEY=VALUE` (repeatable) to fill in `${VAR}` placeholders in task commands.
 
 <a id="playbook-list"></a>
 **`/topology playbook list`**
@@ -217,7 +235,7 @@ Runs the `help` subcommand and prints usage plus a one-line description for ever
 
 **First-run sequence**
 
-1. Run `/topology` (Claude Code) or `python3 -m topology.cli init` (any other agent). Choose Tailscale or manual; for manual, enter your machine hostnames and IPs when prompted. `topology.md` is written and synced automatically.
+1. Run `/topology` (Claude Code) or `python3 -m topology.cli init` (any other agent). Choose Tailscale or manual; for manual, enter your machine hostnames and IPs when prompted. `topology.toml` is written and synced automatically.
 2. Run `/topology discover` to populate live state, hardware details, and agent status.
 3. Start llama-server on an LLM Node (the skill will show you the startup command).
 4. Run `/topology benchmark <hostname> <model>` to record baseline performance.
@@ -243,13 +261,15 @@ Each LLM Node needs at least one inference backend installed:
 
 The skill assumes GGUFs live at `~/.local/share/gguf/` on each LLM Node. Set `$GGUF_PATH` to override this default:
 
-**`$GGUF_PATH`** — path to the directory where GGUF model files are stored. If a machine stores models elsewhere, note the exception in its section of `topology.md`.
+**`$GGUF_PATH`** — path to the directory where GGUF model files are stored. If a machine stores models elsewhere, note the exception in its section of `topology.toml`.
 
 ### Environment variables
 
-**`$AGENT_SSH_USER`** — your username across all machines in the mesh. Every LLM Node and Mesh Node must have this user configured with passwordless key-based SSH auth before agents can act on them. An optional `ssh-user` column in the topology table overrides this per machine for the occasional exception.
+**`$AGENT_SSH_USER`** — your username across all machines in the mesh. Every LLM Node and Mesh Node must have this user configured with passwordless key-based SSH auth before agents can act on them. An optional `ssh_user` field in the topology table overrides this per machine for the occasional exception.
 
-**`$SKILLS_HOME`** — see [manage-skills-skill](https://github.com/nicholasf/manage-skills-skill). All topology files live here.
+**`$TOPOLOGIES_HOME`** — where `topology.toml`, sidecar files, and playbooks live. Defaults to `~/.agents/skills` if unset; point it at a git-tracked directory to version your topology and playbooks like any other config.
+
+**`$SKILLS_HOME`** — see [manage-skills-skill](https://github.com/nicholasf/manage-skills-skill). Where installed skill code lives and where dependent skills store their secrets (`.env`) — unrelated to where topology data lives.
 
 Add these to your `~/.zshrc` or `~/.bashrc`.
 
@@ -257,44 +277,70 @@ Add these to your `~/.zshrc` or `~/.bashrc`.
 
 Skills that depend on topology-skill store per-node secrets in `$SKILLS_HOME/.env`. Copy `.env.example` to `$SKILLS_HOME/.env` and fill in values as you add skills to your setup.
 
-The naming convention is `<NODE>_<SERVICE>_<VAR>`. For example, a Hermes bearer token for a node named `pond` is stored as `POND_HERMES_KEY`. The machines table in `topology.md` records the env var name in a skill-specific column (e.g. `hermes_key_env: POND_HERMES_KEY`) so each skill knows where to look without hardcoding node names.
+The naming convention is `<NODE>_<SERVICE>_<VAR>`. For example, a Hermes bearer token for a node named `pond` is stored as `POND_HERMES_KEY`. The machines table in `topology.toml` records the env var name in a skill-specific field (e.g. `hermes_key_env = "POND_HERMES_KEY"`) so each skill knows where to look without hardcoding node names.
 
 This file is gitignored — it is machine-local and may contain secrets.
 
 ## Topology file format
 
-The top of the file is a machines table. Narrative content — notes, startup commands, benchmark results — follows below it.
+`topology.toml` is the source of truth — read and written as TOML (stdlib `tomllib`/a small
+hand-rolled writer, same approach as playbooks: no new dependency). `topology show` renders it
+as aligned text tables for humans; the raw file itself is the thing every subcommand reads and
+writes.
 
 ### Metadata
 
-```
-**Schema version:** 1
-**Provider:** tailscale
-**Last refreshed:** 2026-06-06T10:00:00
+Top-level scalars:
+
+```toml
+schema_version = 1
+provider = "tailscale"
+last_refreshed = "2026-06-06T10-00-00"
 ```
 
-- `**Provider:**` — `tailscale` (default) or `manual`. Controls how `sync` resolves IPs. Omit to default to `tailscale`.
+- `provider` — `"tailscale"` (default) or `"manual"`. Controls how `sync` resolves IPs. Omit to default to `tailscale`.
 
 ### Machines table
 
-| name | hostname | tailscale-ip | local-ip | os | role | ssh | ssh-user | gpu | vram | last-verified |
-|------|----------|--------------|----------|----|------|-----|----------|-----|------|---------------|
-| pond | pond | 100.x.x.1 | 192.168.x.1 | Ubuntu 24.04 WSL2 | LLM Node, Mesh Node | yes | | RTX 4090 | 24GB | 2026-06-01 |
-| gollum | gollum | 100.x.x.2 | 192.168.x.2 | Fedora 42 | LLM Node, Mesh Node | yes | | Radeon 780M | 15.8GB UMA | 2026-06-01 |
-| hut | hut | 100.x.x.3 | | macOS | Client | yes | | — | — | 2026-06-01 |
+```toml
+[[machines]]
+name = "pond"
+hostname = "pond"
+tailscale_ip = "100.x.x.1"
+local_ip = "192.168.x.1"
+os = "Ubuntu 24.04 WSL2"
+role = "LLM Node, Mesh Node"
+ssh = true
+gpu = "RTX 4090"
+vram = "24GB"
+last_verified = "2026-06-01"
 
-**Columns:**
+[[machines]]
+name = "hut"
+hostname = "hut"
+tailscale_ip = "100.x.x.3"
+os = "macOS"
+role = "Client"
+ssh = true
+last_verified = "2026-06-01"
+```
+
+A field with nothing to say (`hut` has no `local_ip` or `gpu`) is just omitted — TOML doesn't
+require every `[[machines]]` entry to share a schema, so there's no `—` placeholder needed for a
+genuinely absent value the way a markdown table would need one.
+
+**Fields:**
 - `name` — human-friendly name. There is no rule against warmth here.
 - `hostname` — Tailscale hostname, used for SSH and API calls
-- `tailscale-ip` — Tailscale IPv4 address; updated by sync
-- `local-ip` — LAN IP, maintained manually; useful when Tailscale is unavailable
+- `tailscale_ip` — Tailscale IPv4 address; updated by sync
+- `local_ip` — LAN IP, maintained manually; useful when Tailscale is unavailable
 - `os` — operating system
 - `role` — `Client`, `LLM Node`, `Mesh Node`; comma-separated for multiple
-- `ssh` — `yes` or `no`; whether `$AGENT_SSH_USER` can reach this machine
-- `ssh-user` — leave blank to use `$AGENT_SSH_USER`; fill in only when the username differs
-- `gpu` — GPU model, or `—` for CPU-only or client machines
+- `ssh` — `true`/`false`; whether `$AGENT_SSH_USER` can reach this machine
+- `ssh_user` — omit to use `$AGENT_SSH_USER`; set only when the username differs
+- `gpu` — GPU model; omit for CPU-only or client machines
 - `vram` — VRAM available for inference
-- `last-verified` — date you last confirmed this row is accurate
+- `last_verified` — date you last confirmed this row is accurate
 
 ### LLM Node role
 
@@ -303,35 +349,31 @@ An LLM Node is any machine that runs inference workloads. The skill assumes:
 - `llama-server` (llama.cpp) and/or Ollama are installed
 - Port `9337` for llama-server, port `11434` for Ollama
 
-Run `/topology discover` to auto-populate live state for all LLM Nodes. This writes two
-sections into `topology.md`:
+Run `/topology discover` to auto-populate live state for all LLM Nodes. This writes two arrays
+into `topology.toml`:
 
-- `## Live State` — running backends, loaded models, and GGUF inventory per node
-- `## Agent State` — liveness of configured agent endpoints (Hermes, Goose, etc.)
-
-You can also add manual sections below the table for startup commands and notes — one named
-anchor per model/machine combination (e.g. `### pond — qwen3-coder-30b`). These are preserved
-across syncs and discover runs.
+- `model_state` — running backends, loaded models, context windows, and GGUF inventory per node
+- `agent_state` — liveness of configured agent endpoints (Hermes, Goose, etc.)
 
 ### Extending the topology for dependent skills
 
-Each dependent skill writes its own sidecar file — `topology-{skill-name}.md` in `$SKILLS_HOME`.
-This keeps `topology.md` clean and prevents skills from interfering with each other's data. See
+Each dependent skill writes its own sidecar file — `topology-{skill-name}.toml` in `$TOPOLOGIES_HOME`.
+This keeps `topology.toml` clean and prevents skills from interfering with each other's data. See
 [Sidecar files](#sidecar-files).
 
 ### Network layer
 
-Two providers are supported, controlled by the `**Provider:**` field in the topology metadata:
+Two providers are supported, controlled by the `provider` field in the topology metadata:
 
 **`tailscale`** (default when the field is absent)
-Machines are reachable by Tailscale hostname anywhere on the mesh — no port forwarding needed. `sync` calls `tailscale status --json` to refresh IPs and online status. The `tailscale-ip` column is updated automatically.
+Machines are reachable by Tailscale hostname anywhere on the mesh — no port forwarding needed. `sync` calls `tailscale status --json` to refresh IPs and online status. The `tailscale_ip` field is updated automatically.
 
 **`manual`**
-No mesh software required. You populate the `local-ip` column yourself. When you run `sync`, the skill reads those IPs directly rather than querying any external tool. Useful for plain LAN setups or networks where Tailscale is not available. Add `**Provider:** manual` to the topology metadata block to activate this mode.
+No mesh software required. You populate the `local_ip` field yourself. When you run `sync`, the skill reads those IPs directly rather than querying any external tool. Useful for plain LAN setups or networks where Tailscale is not available. Set `provider = "manual"` in the topology metadata to activate this mode.
 
 ## Building and syncing your topology
 
-**First time:** run the init subcommand to create `topology.md` from scratch:
+**First time:** run the init subcommand to create `topology.toml` from scratch:
 
 ```bash
 python3 -m topology.cli init
@@ -396,16 +438,16 @@ All tests use the same API call pattern — swap the endpoint and model name for
 
 ## Sidecar files
 
-Dependent skills can write their own data alongside `topology.md` rather than adding columns
-to the machines table. The convention is `topology-{skill-name}.md` in `$SKILLS_HOME`:
+Dependent skills can write their own data alongside `topology.toml` rather than adding columns
+to the machines table. The convention is `topology-{skill-name}.toml` in `$TOPOLOGIES_HOME`:
 
 ```
-$SKILLS_HOME/topology.md                      # machines table — owned by this skill
-$SKILLS_HOME/topology-ask-agent.md            # agent endpoints — owned by that skill
-$SKILLS_HOME/topology-live-state.md           # example sidecar from another skill
+$TOPOLOGIES_HOME/topology.toml                    # machines table — owned by this skill
+$TOPOLOGIES_HOME/topology-ask-agent.toml          # agent endpoints — owned by that skill
+$TOPOLOGIES_HOME/topology-live-state.toml         # example sidecar from another skill
 ```
 
-The topology skill's command reads all `topology-*.md` files alongside `topology.md`
+The topology skill's command reads all `topology-*.toml` files alongside `topology.toml`
 and synthesises a unified view. Each skill owns exactly one file and can rewrite it freely
 without risking interference with other skills.
 
@@ -415,7 +457,7 @@ A playbook is a named, alias-tagged sequence of commands run against one or more
 recorded once so a phrase resolves to it deterministically later, instead of being re-derived
 from prose every session.
 
-Playbooks live in TOML files in `$SKILLS_HOME`, matched by one glob: `topology-playbook*.toml`.
+Playbooks live in TOML files in `$TOPOLOGIES_HOME`, matched by one glob: `topology-playbook*.toml`.
 
 - `topology-playbook-<node>.toml` — every task in the playbook targets one host (e.g.
   `topology-playbook-pond.toml`), where `<node>` matches a `name` in the machines table.
@@ -446,11 +488,11 @@ description = "Starts llama-server on pond with qwen3.8 loaded."
   oversight = false
 ```
 
-**Tasks** are deliberately simple — a host and a literal command, nothing more; no
-conditionals, loops, or templating. A task is either:
+**Tasks** are deliberately simple — a host and a literal command, plus optional `${VAR}`
+placeholders (see [Variables](#run) below); no conditionals or loops. A task is either:
 
 - a **command task** — `hosts` is a `name` from the machines table (resolved to `hostname`/
-  `ssh-user` and run over SSH) or the reserved `localhost`, which runs as a local subprocess
+  `ssh_user` and run over SSH) or the reserved `localhost`, which runs as a local subprocess
   with no SSH and no table lookup — plus `command`, the literal shell command. Use a TOML
   literal string (`'''...'''`) for multi-line commands so the shell text round-trips verbatim,
   backslashes included.
@@ -492,6 +534,27 @@ Alias uniqueness is enforced globally across every `topology-playbook*.toml` fil
 duplicate alias anywhere is a parse-time error naming both playbooks. Avoiding a collision in
 the first place is on the author; the tool only detects one.
 
+**Variables.** A task's `command` can reference `${VAR}` or `${VAR:-default}`. Supply values
+with repeatable `--var KEY=VALUE` flags:
+
+```
+/topology run "start pi agent" --var tmux_session=work
+```
+
+Every resolved binding — value plus whether it came from `--var` or a default — is printed
+before the plan, so a wrong value is caught by inspection instead of by watching the wrong
+thing run:
+
+```
+Variables:
+  tmux_session = work  (provided)
+
+Plan:
+  1. [localhost] start pi in tmux
+```
+
+A placeholder with no `--var` value and no default is a hard error before anything runs.
+
 **Finding a playbook again:**
 
 ```
@@ -502,22 +565,27 @@ Prints every playbook — name, description, aliases, source file — sorted by 
 
 ## Privacy
 
-`topology.md` and its archives must not be committed to version control. The file contains
-hostnames, IP addresses, and SSH usernames. Treat it like Terraform state — it can be
-regenerated, and it is nobody else's business.
+`topology.toml` contains hostnames, IP addresses, SSH usernames, and — via sidecars and
+playbooks — what's actually running on each node and how to control it. Treat it like Terraform
+state: regenerable, and worth being deliberate about who can see it.
 
-Playbooks (`topology-playbook*.toml`) are at least as sensitive and follow the same rule: they
-reveal what's running on a node and how to control it, not just network details.
+`$TOPOLOGIES_HOME` can point anywhere, including a git repository, so you can version this data
+the way you would dotfiles — useful across machines, and lets you diff how your setup changed
+over time. If you do that, keep the repo **private**. None of this is a credential (secrets stay
+in `$SKILLS_HOME/.env`, never here), but a public repo still hands anyone a recon map of your
+home network — real hostnames, IPs, service ports, and exact commands to control them — for no
+benefit, since it's specific to your setup rather than reusable by others. If you want to publish
+something publicly, write generic template playbooks with placeholder hosts instead of exporting
+the real files.
 
-One pattern covers the main file and everything this project ever writes alongside it —
-sidecars, the backup, and playbooks, regardless of extension:
+If `$TOPOLOGIES_HOME` is *not* a dedicated repo — e.g. it falls back to `~/.agents/skills`,
+shared with other skills — add this to that directory's `.gitignore` so nothing here is
+accidentally swept into an unrelated commit:
 
 ```
-topology.md
+topology.toml
 topology-*
 ```
-
-If your topology lives in a git repository, verify these patterns are present.
 
 ## Future
 

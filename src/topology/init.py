@@ -8,7 +8,7 @@ Non-interactive mode (for agents and scripts):
   --provider tailscale
   --provider manual --machines "pond 192.168.86.118,gollum 192.168.86.50"
 
-After writing topology.md the script calls sync.py to validate and
+After writing topology.toml the script calls sync.py to validate and
 populate it, so the file is ready to use immediately.
 """
 import argparse
@@ -17,48 +17,23 @@ import subprocess
 import sys
 from datetime import datetime
 
-
-TAILSCALE_COLUMNS = ['name', 'hostname', 'tailscale-ip', 'local-ip', 'os', 'role', 'ssh', 'ssh-user', 'gpu', 'vram', 'last-verified']
-MANUAL_COLUMNS = ['name', 'hostname', 'local-ip', 'os', 'role', 'ssh', 'ssh-user', 'gpu', 'vram', 'last-verified']
-
-
-def get_skills_home() -> str:
-    return os.environ.get('SKILLS_HOME', os.path.expanduser('~/.agents/skills'))
+from .sync import get_topology_path
+from .toml_io import write_toml
 
 
-def get_topology_path() -> str:
-    return os.path.join(get_skills_home(), 'topology.md')
+def machines_to_rows(machines: list[dict]) -> list[dict]:
+    return [{'name': m['hostname'], 'hostname': m['hostname'], 'local_ip': m['ip']} for m in machines]
 
 
-def build_table(columns: list[str], rows: list[dict] = None) -> list[str]:
-    header = '| ' + ' | '.join(columns) + ' |'
-    separator = '|' + '|'.join('---' for _ in columns) + '|'
-    lines = [header, separator]
-    for row in (rows or []):
-        lines.append('| ' + ' | '.join(row.get(col, '—') for col in columns) + ' |')
-    return lines
-
-
-def machines_to_rows(machines: list[dict], columns: list[str]) -> list[dict]:
-    rows = []
-    for m in machines:
-        row = {col: '—' for col in columns}
-        row['hostname'] = m['hostname']
-        row['name'] = m['hostname']
-        row['local-ip'] = m['ip']
-        rows.append(row)
-    return rows
-
-
-def write_topology(provider: str, table_lines: list[str], topology_path: str) -> None:
-    timestamp = datetime.now().strftime('%Y-%m-%dT%H-%M-%S')
+def write_topology(provider: str, machines: list[dict], topology_path: str) -> None:
     os.makedirs(os.path.dirname(topology_path), exist_ok=True)
-    with open(topology_path, 'w') as f:
-        f.write(f'**Schema version:** 1\n')
-        f.write(f'**Provider:** {provider}\n')
-        f.write(f'**Last refreshed:** {timestamp}\n')
-        f.write('\n')
-        f.write('\n'.join(table_lines) + '\n')
+    data = {
+        'schema_version': 1,
+        'provider': provider,
+        'last_refreshed': datetime.now().strftime('%Y-%m-%dT%H-%M-%S'),
+        'machines': machines,
+    }
+    write_toml(data, topology_path)
     print(f'Created {topology_path}')
 
 
@@ -128,8 +103,7 @@ def main(argv: list[str] | None = None) -> None:
     provider = args.provider or prompt_provider()
 
     if provider == 'tailscale':
-        table_lines = build_table(TAILSCALE_COLUMNS)
-        write_topology('tailscale', table_lines, topology_path)
+        write_topology('tailscale', [], topology_path)
         print('Running sync to populate from Tailscale...')
         if not run_sync():
             print('Sync failed. Check that Tailscale is installed and running.', file=sys.stderr)
@@ -148,9 +122,8 @@ def main(argv: list[str] | None = None) -> None:
             print('No machines entered. Exiting.', file=sys.stderr)
             sys.exit(1)
 
-        rows = machines_to_rows(machines, MANUAL_COLUMNS)
-        table_lines = build_table(MANUAL_COLUMNS, rows)
-        write_topology('manual', table_lines, topology_path)
+        rows = machines_to_rows(machines)
+        write_topology('manual', rows, topology_path)
         print('Running sync to validate and timestamp...')
         if not run_sync():
             print('Sync failed.', file=sys.stderr)

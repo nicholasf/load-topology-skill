@@ -4,81 +4,34 @@ import glob
 import os
 import shutil
 import sys
-from datetime import datetime  # used by update_last_refreshed
+from datetime import datetime
 
 from .discover_tailscale import ManualProvider, TailscaleProvider
-
-
-COLUMNS = ['name', 'hostname', 'tailscale-ip', 'local-ip', 'os', 'role', 'ssh', 'ssh-user', 'gpu', 'vram', 'last-verified']
-MANUAL_COLUMNS = {'name', 'local-ip', 'role', 'ssh', 'ssh-user', 'gpu', 'vram', 'last-verified'}
+from .toml_io import read_toml, write_toml
 
 
 def get_topology_path() -> str:
-    skills_home = os.environ.get('SKILLS_HOME', os.path.expanduser('~/.agents/skills'))
-    return os.path.join(skills_home, 'topology.md')
+    topologies_home = os.environ.get('TOPOLOGIES_HOME', os.path.expanduser('~/.agents/skills'))
+    return os.path.join(topologies_home, 'topology.toml')
 
 
-def list_sidecars(skills_home: str) -> list[str]:
-    """Return sorted topology-*.md sidecar files, excluding backup files."""
-    candidates = glob.glob(os.path.join(skills_home, 'topology-*.md'))
-    return sorted(p for p in candidates if not fnmatch.fnmatch(os.path.basename(p), 'topology-backup*.md'))
+def list_sidecars(topologies_home: str) -> list[str]:
+    """Return sorted topology-*.toml sidecar files, excluding backup files."""
+    candidates = glob.glob(os.path.join(topologies_home, 'topology-*.toml'))
+    return sorted(p for p in candidates if not fnmatch.fnmatch(os.path.basename(p), 'topology-backup*.toml'))
 
 
 def backup(topology_path: str) -> None:
-    backup_path = os.path.join(os.path.dirname(topology_path), 'topology-backup.md')
+    backup_path = os.path.join(os.path.dirname(topology_path), 'topology-backup.toml')
     shutil.copy2(topology_path, backup_path)
 
 
-def parse_table(lines: list[str]) -> tuple[int, int, list[dict]]:
-    """Return (table_start, table_end, rows). table_end is the index after the last table line.
-
-    Reads all columns from the actual header row so that extra columns added by
-    dependent skills (e.g. hermes_gateway, goose_acp_url) are preserved across syncs.
-    """
-    table_start = -1
-    for i, line in enumerate(lines):
-        if line.strip().startswith('| name |'):
-            table_start = i
-            break
-
-    if table_start == -1:
-        return -1, -1, []
-
-    # Read actual column names from the header, not the fixed COLUMNS list
-    actual_cols = [p.strip() for p in lines[table_start].split('|')[1:-1]]
-
-    # table_end defaults to end of file in case there's no blank line after the table
-    table_end = len(lines)
-    for i in range(table_start + 1, len(lines)):
-        stripped = lines[i].strip()
-        if not stripped or (stripped.startswith('-') and not stripped.startswith('|-')):
-            table_end = i
-            break
-
-    rows = []
-    for line in lines[table_start + 2:table_end]:  # skip header and separator
-        if not line.strip() or not line.startswith('|'):
-            continue
-        parts = [p.strip() for p in line.split('|')[1:-1]]
-        while len(parts) < len(actual_cols):
-            parts.append('—')
-        rows.append(dict(zip(actual_cols, parts[:len(actual_cols)])))
-
-    return table_start, table_end, rows
+def read_provider(data: dict) -> str:
+    return data.get('provider', 'tailscale').lower()
 
 
-def read_provider(lines: list[str]) -> str:
-    for line in lines:
-        if '**Provider:**' in line:
-            return line.split('**Provider:**')[1].strip().lower()
-    return 'tailscale'
-
-
-def merge(existing_rows: list[dict], discovered: list[dict], ip_column: str = 'tailscale-ip') -> tuple[list[dict], list[str]]:
-    # Derive column set from existing rows so extra columns are preserved for new machines too
-    all_cols = list(dict.fromkeys(col for row in existing_rows for col in row)) if existing_rows else COLUMNS
-
-    existing_by_hostname = {r['hostname']: r for r in existing_rows}
+def merge(existing_machines: list[dict], discovered: list[dict], ip_key: str = 'tailscale_ip') -> tuple[list[dict], list[str]]:
+    existing_by_hostname = {m['hostname']: m for m in existing_machines}
     discovered_hostnames = {m['hostname'] for m in discovered}
     changes = []
     merged = []
@@ -86,56 +39,25 @@ def merge(existing_rows: list[dict], discovered: list[dict], ip_column: str = 't
     for machine in discovered:
         hostname = machine['hostname']
         if hostname in existing_by_hostname:
-            row = existing_by_hostname[hostname].copy()
-            old_ip = row.get(ip_column, '—')
-            row[ip_column] = machine['tailscale_ip']
+            row = dict(existing_by_hostname[hostname])
+            old_ip = row.get(ip_key, '—')
+            row[ip_key] = machine['tailscale_ip']
             row['os'] = machine['os']
             if old_ip != machine['tailscale_ip']:
-                changes.append(f"  {hostname}: {ip_column} {old_ip} → {machine['tailscale_ip']}")
+                changes.append(f"  {hostname}: {ip_key} {old_ip} → {machine['tailscale_ip']}")
         else:
-            row = {col: '—' for col in all_cols}
-            row['hostname'] = hostname
-            row['tailscale-ip'] = machine['tailscale_ip']
-            row['os'] = machine['os']
+            row = {'name': hostname, 'hostname': hostname, ip_key: machine['tailscale_ip'], 'os': machine['os']}
             changes.append(f'  {hostname}: new machine added')
         merged.append(row)
 
-    for row in existing_rows:
+    for row in existing_machines:
         if row['hostname'] not in discovered_hostnames:
-            updated = row.copy()
-            updated[ip_column] = '(offline)'
+            updated = dict(row)
+            updated[ip_key] = '(offline)'
             merged.append(updated)
             changes.append(f"  {row['hostname']}: marked offline")
 
     return merged, changes
-
-
-def build_table(rows: list[dict]) -> list[str]:
-    # Preserve all columns from the rows; keep core COLUMNS order, extras appended
-    if rows:
-        seen = list(dict.fromkeys(col for row in rows for col in row))
-        cols = [c for c in COLUMNS if c in seen] + [c for c in seen if c not in COLUMNS]
-    else:
-        cols = COLUMNS
-    header = '| ' + ' | '.join(cols) + ' |'
-    separator = '|' + '|'.join('---' for _ in cols) + '|'
-    lines = [header, separator]
-    for row in rows:
-        lines.append('| ' + ' | '.join(row.get(col, '—') for col in cols) + ' |')
-    return lines
-
-
-def update_last_refreshed(lines: list[str], table_start: int) -> list[str]:
-    timestamp = datetime.now().strftime('%Y-%m-%dT%H-%M-%S')
-    updated = list(lines)
-    for i in range(min(table_start, len(lines))):
-        if '**Last refreshed:**' in updated[i]:
-            updated[i] = f'**Last refreshed:** {timestamp}'
-            return updated
-    # Not found — insert before the table
-    if table_start >= 0:
-        updated.insert(table_start, f'**Last refreshed:** {timestamp}')
-    return updated
 
 
 def main():
@@ -147,27 +69,21 @@ def main():
 
     backup(topology_path)
 
-    with open(topology_path) as f:
-        lines = f.read().splitlines()
+    data = read_toml(topology_path)
+    existing_machines = data.get('machines', [])
 
-    table_start, table_end, existing_rows = parse_table(lines)
-
-    if table_start == -1:
-        print('No machines table found in topology file. Add a table with header row starting "| name |".')
-        sys.exit(1)
-
-    provider_name = read_provider(lines)
+    provider_name = read_provider(data)
     if provider_name == 'manual':
         machines = [
-            {'hostname': r['hostname'], 'ip': r.get('local-ip', '—'), 'os': r.get('os', '')}
-            for r in existing_rows
-            if r.get('local-ip', '—') not in ('—', '', '(offline)')
+            {'hostname': r['hostname'], 'ip': r.get('local_ip', ''), 'os': r.get('os', '')}
+            for r in existing_machines
+            if r.get('local_ip') not in (None, '', '(offline)')
         ]
         provider = ManualProvider(machines)
-        ip_column = 'local-ip'
+        ip_key = 'local_ip'
     else:
         provider = TailscaleProvider()
-        ip_column = 'tailscale-ip'
+        ip_key = 'tailscale_ip'
 
     try:
         discovered = provider.discover()
@@ -175,14 +91,12 @@ def main():
         print(f'Discovery error: {e}', file=sys.stderr)
         sys.exit(1)
 
-    merged_rows, changes = merge(existing_rows, discovered, ip_column)
-    new_table_lines = build_table(merged_rows)
+    merged_machines, changes = merge(existing_machines, discovered, ip_key)
 
-    updated_lines = lines[:table_start] + new_table_lines + lines[table_end:]
-    updated_lines = update_last_refreshed(updated_lines, table_start)
+    data['machines'] = merged_machines
+    data['last_refreshed'] = datetime.now().strftime('%Y-%m-%dT%H-%M-%S')
 
-    with open(topology_path, 'w') as f:
-        f.write('\n'.join(updated_lines) + '\n')
+    write_toml(data, topology_path)
 
     print(f'Topology updated: {topology_path}')
     if changes:

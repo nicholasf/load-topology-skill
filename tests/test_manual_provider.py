@@ -1,23 +1,21 @@
-import os
-import shutil
-
-import pytest
-
 from topology.discover_tailscale import ManualProvider
-from topology.sync import build_table, merge, parse_table, read_provider, update_last_refreshed
-
+from topology.sync import merge
+from topology.toml_io import read_toml, write_toml
 
 POND_LOCAL_IP = '192.168.86.118'
 
-FIXTURE_TOPOLOGY = f"""\
-**Schema version:** 1
-**Provider:** manual
-**Last refreshed:** 2026-06-11T10-00-00
-
-| name | hostname | local-ip | os | role | ssh | gpu | vram | last-verified |
-|------|----------|----------|----|------|-----|-----|------|---------------|
-| pond | pond | {POND_LOCAL_IP} | linux | LLM Node | yes | RTX 4090 | 24GB | 2026-06-11 |
-"""
+FIXTURE_TOPOLOGY = {
+    'schema_version': 1,
+    'provider': 'manual',
+    'last_refreshed': '2026-06-11T10-00-00',
+    'machines': [
+        {
+            'name': 'pond', 'hostname': 'pond', 'local_ip': POND_LOCAL_IP, 'os': 'linux',
+            'role': 'LLM Node', 'ssh': True, 'gpu': 'RTX 4090', 'vram': '24GB',
+            'last_verified': '2026-06-11',
+        },
+    ],
+}
 
 
 # -- ManualProvider --
@@ -54,82 +52,50 @@ def test_manual_provider_multiple_machines():
     assert result[1]['tailscale_ip'] == '192.168.86.50'
 
 
-# -- read_provider --
-
-def test_read_provider_detects_manual():
-    lines = ['**Schema version:** 1', '**Provider:** manual', '']
-    assert read_provider(lines) == 'manual'
-
-
-def test_read_provider_detects_tailscale():
-    lines = ['**Provider:** tailscale']
-    assert read_provider(lines) == 'tailscale'
-
-
-def test_read_provider_defaults_to_tailscale_when_absent():
-    lines = ['# Topology', '']
-    assert read_provider(lines) == 'tailscale'
-
-
-def test_read_provider_is_case_insensitive():
-    lines = ['**Provider:** Manual']
-    assert read_provider(lines) == 'manual'
-
-
-# -- merge with ip_column='local-ip' --
-
-def _manual_row(**overrides):
-    cols = ['name', 'hostname', 'local-ip', 'os', 'role', 'ssh', 'gpu', 'vram', 'last-verified']
-    row = {col: '—' for col in cols}
-    row.update(overrides)
-    return row
-
+# -- merge with ip_key='local_ip' --
 
 def _discovered(hostname, ip, os_name='linux'):
     return {'hostname': hostname, 'tailscale_ip': ip, 'os': os_name, 'online': True, 'is_self': False}
 
 
-def test_merge_manual_ip_column_updated():
-    existing = [_manual_row(hostname='pond', **{'local-ip': '192.168.86.100'})]
-    merged, changes = merge(existing, [_discovered('pond', POND_LOCAL_IP)], ip_column='local-ip')
-    assert merged[0]['local-ip'] == POND_LOCAL_IP
-    assert any('local-ip' in c for c in changes)
+def test_merge_manual_ip_key_updated():
+    existing = [{'name': 'pond', 'hostname': 'pond', 'local_ip': '192.168.86.100'}]
+    merged, changes = merge(existing, [_discovered('pond', POND_LOCAL_IP)], ip_key='local_ip')
+    assert merged[0]['local_ip'] == POND_LOCAL_IP
+    assert any('local_ip' in c for c in changes)
 
 
-def test_merge_manual_preserves_manual_columns():
-    existing = [_manual_row(hostname='pond', **{'local-ip': POND_LOCAL_IP, 'role': 'LLM Node', 'gpu': 'RTX 4090'})]
-    merged, changes = merge(existing, [_discovered('pond', POND_LOCAL_IP)], ip_column='local-ip')
+def test_merge_manual_preserves_manual_keys():
+    existing = [{'name': 'pond', 'hostname': 'pond', 'local_ip': POND_LOCAL_IP, 'role': 'LLM Node', 'gpu': 'RTX 4090'}]
+    merged, changes = merge(existing, [_discovered('pond', POND_LOCAL_IP)], ip_key='local_ip')
     assert merged[0]['role'] == 'LLM Node'
     assert merged[0]['gpu'] == 'RTX 4090'
     assert changes == []
 
 
-def test_merge_manual_offline_uses_correct_column():
-    existing = [_manual_row(hostname='pond', **{'local-ip': POND_LOCAL_IP})]
-    merged, changes = merge(existing, [], ip_column='local-ip')
-    assert merged[0]['local-ip'] == '(offline)'
+def test_merge_manual_offline_uses_correct_key():
+    existing = [{'name': 'pond', 'hostname': 'pond', 'local_ip': POND_LOCAL_IP}]
+    merged, changes = merge(existing, [], ip_key='local_ip')
+    assert merged[0]['local_ip'] == '(offline)'
     assert any('offline' in c for c in changes)
 
 
-# -- integration: sync against a temp SKILLS_HOME --
+# -- integration: sync against a temp TOPOLOGIES_HOME --
 
 def test_sync_manual_topology_roundtrip(tmp_path, monkeypatch):
-    monkeypatch.setenv('SKILLS_HOME', str(tmp_path))
+    monkeypatch.setenv('TOPOLOGIES_HOME', str(tmp_path))
 
-    topology_path = tmp_path / 'topology.md'
-    topology_path.write_text(FIXTURE_TOPOLOGY)
+    topology_path = tmp_path / 'topology.toml'
+    write_toml(FIXTURE_TOPOLOGY, str(topology_path))
 
-    # Import sync functions after monkeypatching env
-    from topology.sync import backup, get_topology_path, main
+    from topology.sync import get_topology_path, main
 
-    # Confirm path resolution picks up our temp dir
     assert get_topology_path() == str(topology_path)
 
-    # Run sync main() — should use ManualProvider, not Tailscale
     main()
 
-    result = topology_path.read_text()
-    assert POND_LOCAL_IP in result
-    assert '**Last refreshed:**' in result
-    # Backup created
-    assert (tmp_path / 'topology-backup.md').exists()
+    result = read_toml(str(topology_path))
+    assert result['machines'][0]['local_ip'] == POND_LOCAL_IP
+    assert '**Last refreshed:**' not in str(result)
+    assert 'last_refreshed' in result
+    assert (tmp_path / 'topology-backup.toml').exists()
