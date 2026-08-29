@@ -13,6 +13,7 @@ SUBCOMMANDS = [
     ('sync', 'Refresh IPs and online status from the current provider.'),
     ('benchmark <hostname> <model>', 'Measure model throughput and record results.'),
     ('show', 'Print full combined topology and all sidecar files.'),
+    ('docs', 'Write a per-file markdown breakdown (with line-number links) into $TOPOLOGIES_HOME/README.md.'),
     ('run "<phrase>" [--skip-oversight]', 'Resolve a trigger phrase to a playbook and run it.'),
     ('playbook list', 'List every playbook: name, description, aliases, source file.'),
     ('help', 'Show this help message.'),

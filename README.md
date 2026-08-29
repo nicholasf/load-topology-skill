@@ -182,6 +182,7 @@ List every playbook — name, description, aliases, source file — across every
 - [`/topology sync`](#sync) — refresh IPs and online status from the current provider
 - [`/topology benchmark <hostname> <model>`](#benchmark) — measure model throughput and record results
 - [`/topology show`](#show) — print full combined topology and all sidecar files
+- [`/topology docs`](#docs) — write a per-file markdown breakdown into `$TOPOLOGIES_HOME/README.md`
 - [`/topology run "<phrase>"`](#run) — resolve a trigger phrase to a playbook and run it
 - [`/topology playbook list`](#playbook-list) — list every playbook: name, description, aliases, source file
 - [`/topology help`](#help) — list all subcommands with a one-line description
@@ -217,6 +218,18 @@ Runs the `benchmark` subcommand against a live llama-server on the named host an
 **`/topology show`**
 
 Prints `topology.toml` and every `topology-*.toml` sidecar file in `$TOPOLOGIES_HOME` as a single combined view.
+
+<a id="docs"></a>
+**`/topology docs`**
+
+Writes a per-file markdown breakdown of `topology.toml` and its sidecar TOML files into
+`$TOPOLOGIES_HOME/README.md`, so the repo's own README stays a readable index of what's inside
+each file without hand-editing. For every top-level `[[section]]` entry, it lists a short label
+(the entry's first field — `name` for machines/playbooks, `hostname` for state/benchmark rows)
+and a GitHub line-number link back to the raw TOML (`topology.toml#L12`), so you can jump
+straight from the README to the exact line. Output is written between
+`<!-- topology-docs:start -->`/`<!-- topology-docs:end -->` markers — re-running it replaces only
+that block, leaving the rest of the README (or a first-time file with none yet) untouched.
 
 <a id="run"></a>
 **`/topology run "<phrase>"`**
